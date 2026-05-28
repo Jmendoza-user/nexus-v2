@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Libro abierto -->
+  <path d="M100 140 L48 128 L48 60 Q48 54 54 56 L100 70 L100 140 Z"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M100 140 L152 128 L152 60 Q152 54 146 56 L100 70 L100 140 Z"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Línea de encuadernación -->
+  <line x1="100" y1="70" x2="100" y2="140" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <!-- Líneas de texto página izquierda -->
+  <line x1="60" y1="84" x2="88" y2="86" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="60" y1="94" x2="88" y2="96" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="60" y1="104" x2="80" y2="106" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="60" y1="114" x2="88" y2="116" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <!-- Líneas de texto página derecha -->
+  <line x1="112" y1="86" x2="140" y2="84" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="112" y1="96" x2="140" y2="94" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="112" y1="106" x2="132" y2="104" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <!-- Marcador/bookmark -->
+  <path d="M142 54 L142 70 L136 66 L130 70 L130 54 Z"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Constelación arriba (nodos conectados = backlinks) -->
+  <circle cx="80" cy="38" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="100" cy="30" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="120" cy="40" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+  <line x1="82" y1="39" x2="98" y2="31" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="102" y1="31" x2="118" y2="39" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="82" y1="39" x2="118" y2="41" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="2 2"/>
+</svg>

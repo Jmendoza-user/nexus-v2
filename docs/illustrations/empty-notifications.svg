@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Campana -->
+  <path d="M100 44 C80 44 64 60 64 80 L64 112 L52 124 L148 124 L136 112 L136 80 C136 60 120 44 100 44 Z"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Mango campana arriba -->
+  <path d="M92 44 Q100 36 108 44" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <!-- Base (punto de suspensión) -->
+  <path d="M88 124 Q88 136 100 136 Q112 136 112 124"
+        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <!-- ZZZ (silencio) -->
+  <line x1="118" y1="50" x2="128" y2="50" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="128" y1="50" x2="118" y2="60" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="118" y1="60" x2="128" y2="60" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Z pequeño -->
+  <line x1="132" y1="40" x2="138" y2="40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="138" y1="40" x2="132" y2="47" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="132" y1="47" x2="138" y2="47" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Ondas de señal (deshabilitadas) -->
+  <path d="M54 80 Q46 90 46 100" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+  <path d="M146 80 Q154 90 154 100" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+  <!-- Puntos decorativos -->
+  <circle cx="40" cy="130" r="2" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="160" cy="60" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+</svg>

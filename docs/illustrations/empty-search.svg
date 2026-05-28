@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Lupa -->
+  <circle cx="88" cy="86" r="36" stroke="currentColor" stroke-width="1.5"/>
+  <line x1="114" y1="112" x2="150" y2="150" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  <!-- Interior lupa: documento no encontrado -->
+  <rect x="74" y="72" width="28" height="36" rx="3"
+        stroke="currentColor" stroke-width="1.5"/>
+  <line x1="78" y1="82" x2="98" y2="82" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="78" y1="89" x2="94" y2="89" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <!-- Tachado (no encontrado) -->
+  <line x1="74" y1="72" x2="102" y2="108" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <!-- Signo de interrogación flotante -->
+  <path d="M148 44 Q148 36 156 36 Q164 36 164 44 Q164 52 156 52 L156 56"
+        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <circle cx="156" cy="62" r="2" stroke="currentColor" stroke-width="1.5"/>
+  <!-- Puntos decorativos -->
+  <circle cx="40" cy="52" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="156" cy="148" r="2" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="36" cy="144" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+</svg>

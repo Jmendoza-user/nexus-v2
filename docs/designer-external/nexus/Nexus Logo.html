@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NEXUS — Identidad de marca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#07070A; --surface:#101015; --elevated:#1A1A22;
+    --border:#1F1F29; --border2:#2A2A36;
+    --text:#F4F4F7; --t2:#A8A8B8; --t3:#6A6A7C;
+    --accent:#7C5CFF; --g1:#9B7BFF; --g2:#6B4CE6;
+    --grad:linear-gradient(135deg,#9B7BFF,#6B4CE6);
+    --font:'Inter',system-ui,sans-serif; --display:'Space Grotesk',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1100px 720px at 16% -6%, rgba(124,92,255,0.16), transparent 60%),
+      radial-gradient(900px 620px at 112% 8%, rgba(59,130,246,0.08), transparent 55%),
+      var(--bg);
+    color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased;
+    line-height:1.6;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:60px 32px 110px}
+
+  /* hero */
+  .hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:26px;padding:48px 0 16px}
+  .hero-mark{width:168px;height:168px}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:0.22em;color:var(--accent);text-transform:uppercase}
+  .hero h1{font-family:var(--display);font-size:64px;letter-spacing:0.1em;margin:0;font-weight:700}
+  .hero p{color:var(--t2);font-size:17px;max-width:560px;margin:0;text-wrap:pretty}
+
+  section{margin-top:80px}
+  .sec-h{display:flex;align-items:baseline;gap:14px;margin-bottom:26px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .sec-h h2{font-size:13px;text-transform:uppercase;letter-spacing:0.14em;margin:0;color:var(--accent);font-weight:700}
+  .sec-h span{color:var(--t3);font-size:14px}
+
+  .grid{display:grid;gap:18px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;position:relative}
+  .card .stage{display:flex;align-items:center;justify-content:center;min-height:180px;padding:32px}
+  .card .stage.light{background:#FAFAFB}
+  .card .stage.mid{background:var(--elevated)}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;border-top:1px solid var(--border)}
+  .bar .nm{font-size:13px;font-weight:600}
+  .bar .sub{font-size:11px;color:var(--t3);font-family:var(--mono)}
+  .dl{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 13px;border-radius:9px;background:var(--elevated);border:1px solid var(--border2);color:var(--text);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:background .15s,transform .1s}
+  .dl:hover{background:#23232e}
+  .dl:active{transform:scale(.96)}
+
+  /* lockup display */
+  .lockup{display:flex;align-items:center;gap:22px}
+  .lockup .word{font-family:var(--display);font-weight:700;letter-spacing:0.16em;font-size:46px}
+  .lockup.stacked{flex-direction:column;gap:16px}
+  .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  .swatch{border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+  .swatch .c{height:88px}
+  .swatch .m{padding:11px 13px}
+  .swatch .m .n{font-size:13px;font-weight:600}
+  .swatch .m .h{font-family:var(--mono);font-size:11px;color:var(--t3);margin-top:2px}
+
+  .note{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--t2)}
+  .note svg{flex-shrink:0;margin-top:2px}
+  .construct{position:relative}
+  .do-dont{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .dd-tag{position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.04em}
+  .dd-do{background:rgba(34,197,94,.16);color:#22C55E}
+  .dd-no{background:rgba(239,68,68,.16);color:#EF4444}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <img class="hero-mark" src="logo/nexus-mark-animated.svg" alt="NEXUS logo animado" />
+    <div class="eyebrow">Identidad de marca</div>
+    <h1>NEXUS</h1>
+    <p>El isotipo es una <strong style="color:var(--text)">“N” constelación</strong>: cuatro nodos enlazados por un trazo continuo, con un núcleo central — el <em>nexus</em> que conecta tu voz, tus finanzas y tu segundo cerebro. Un eco directo del Aura del producto.</p>
+  </div>
+
+  <!-- LOGOTIPO / LOCKUPS -->
+  <section>
+    <div class="sec-h"><h2>Logotipo</h2><span>Isotipo + palabra · Space Grotesk 700</span></div>
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="card">
+        <div class="stage" style="padding:54px">
+          <div class="lockup">
+            <img src="logo/nexus-mark.svg" width="76" height="76" alt="" />
+            <span class="word" style="color:var(--text)">NEXUS</span>
+          </div>
+        </div>
+        <div class="bar">
+          <div><div class="nm">Lockup horizontal — principal</div><div class="sub">nexus-lockup.svg</div></div>
+          <a class="dl" href="logo/nexus-lockup.svg" download>↓ SVG</a>
+        </div>
+      </div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:18px">
+      <div class="card">
+        <div class="stage mid">
+          <div class="lockup stacked">
+            <img src="logo/nexus-mark.svg" width="68" height="68" alt="" />
+            <span class="word" style="font-size:34px;color:var(--text)">NEXUS</span>
+          </div>
+        </div>
+        <div class="bar"><div class="nm">Lockup vertical</div><span class="sub">app · splash</span></div>
+      </div>
+      <div class="card">
+        <div class="stage light">
+          <div class="lockup">
+            <img src="logo/nexus-mark.svg" width="64" height="64" alt="" />
+            <span class="word" style="font-size:38px;color:#0A0A12">NEXUS</span>
+          </div>
+        </div>
+        <div class="bar"><div class="nm">Sobre fondo claro</div><span class="sub">light mode</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ISOTIPO -->
+  <section>
+    <div class="sec-h"><h2>Isotipo</h2><span>La marca sola · favicon, avatar, app</span></div>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="card">
+        <div class="stage"><img src="logo/nexus-mark.svg" width="92" height="92" alt="NEXUS" /></div>
+        <div class="bar"><div><div class="nm">Gradiente</div></div><a class="dl" href="logo/nexus-mark.svg" download>↓</a></div>
+      </div>
+      <div class="card">
+        <div class="stage" style="color:#fff"><div style="width:92px;height:92px" id="mono-light"></div></div>
+        <div class="bar"><div><div class="nm">Mono claro</div></div><a class="dl" href="logo/nexus-mark-mono.svg" download>↓</a></div>
+      </div>
+      <div class="card">
+        <div class="stage light" style="color:#0A0A12"><div style="width:92px;height:92px" id="mono-dark"></div></div>
+        <div class="bar"><div><div class="nm">Mono tinta</div></div><a class="dl" href="logo/nexus-mark-mono.svg" download>↓</a></div>
+      </div>
+      <div class="card">
+        <div class="stage"><img src="logo/nexus-icon.svg" width="100" height="100" alt="NEXUS app icon" style="border-radius:25px;box-shadow:0 14px 36px rgba(124,92,255,.4)" /></div>
+        <div class="bar"><div><div class="nm">App icon</div></div><a class="dl" href="logo/nexus-icon.svg" download>↓</a></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANIMADO -->
+  <section>
+    <div class="sec-h"><h2>Versión animada</h2><span>Trazo + nodos + núcleo que late · CSS, respeta reduced-motion</span></div>
+    <div class="card">
+      <div class="stage" style="min-height:280px;gap:60px;flex-wrap:wrap">
+        <img src="logo/nexus-mark-animated.svg" width="150" height="150" id="anim-a" alt="" />
+        <img src="logo/nexus-mark-animated.svg" width="150" height="150" id="anim-b" alt="" />
+        <img src="logo/nexus-mark-animated.svg" width="150" height="150" id="anim-c" alt="" />
+      </div>
+      <div class="bar">
+        <div><div class="nm">Intro animada — carga de app, splash, loader</div><div class="sub">nexus-mark-animated.svg</div></div>
+        <div style="display:flex;gap:10px">
+          <button class="dl" id="replay">↻ Repetir</button>
+          <a class="dl" href="logo/nexus-mark-animated.svg" download>↓ SVG</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section>
+    <div class="sec-h"><h2>Color del logo</h2><span>Gradiente violeta de marca</span></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">
+      <div class="swatch"><div class="c" style="background:linear-gradient(135deg,#9B7BFF,#6B4CE6)"></div><div class="m"><div class="n">Gradiente marca</div><div class="h">#9B7BFF → #6B4CE6</div></div></div>
+      <div class="swatch"><div class="c" style="background:#7C5CFF"></div><div class="m"><div class="n">Acento sólido</div><div class="h">#7C5CFF</div></div></div>
+      <div class="swatch"><div class="c" style="background:#F4F4F7"></div><div class="m"><div class="n">Mono claro</div><div class="h">#F4F4F7</div></div></div>
+      <div class="swatch"><div class="c" style="background:#07070A;border-bottom:1px solid var(--border)"></div><div class="m"><div class="n">Mono tinta</div><div class="h">#07070A</div></div></div>
+    </div>
+  </section>
+
+  <!-- USO -->
+  <section>
+    <div class="sec-h"><h2>Uso correcto</h2><span>Área de protección y errores comunes</span></div>
+    <div class="do-dont">
+      <div class="card construct">
+        <span class="dd-tag dd-do">✓ Correcto</span>
+        <div class="stage" style="min-height:200px">
+          <div style="position:relative;padding:30px;border:1px dashed var(--border2);border-radius:12px">
+            <img src="logo/nexus-mark.svg" width="84" height="84" alt="" style="display:block" />
+          </div>
+        </div>
+        <div class="bar"><div class="nm">Respeta el área de protección (≥ altura de un nodo)</div></div>
+      </div>
+      <div class="card construct">
+        <span class="dd-tag dd-no">✕ Evitar</span>
+        <div class="stage" style="min-height:200px;gap:20px">
+          <img src="logo/nexus-mark.svg" width="64" height="84" alt="" style="filter:hue-rotate(120deg)" />
+          <img src="logo/nexus-mark.svg" width="84" height="60" alt="" />
+        </div>
+        <div class="bar"><div class="nm">No deformar, recolorear fuera de paleta ni estirar</div></div>
+      </div>
+    </div>
+  </section>
+
+  <div style="margin-top:70px;text-align:center;color:var(--t3);font-size:12px;font-family:var(--mono)">
+    NEXUS V2.0 · identidad de marca · SVG vectorial · J4 Smart Solutions
+  </div>
+</div>
+
+<script>
+  // inline the mono mark so currentColor adapts to each stage
+  fetch('logo/nexus-mark-mono.svg').then(r=>r.text()).then(svg=>{
+    ['mono-light','mono-dark'].forEach(id=>{
+      const el=document.getElementById(id); if(!el) return;
+      el.innerHTML=svg;
+      const s=el.querySelector('svg');
+      if(s){ s.removeAttribute('width'); s.removeAttribute('height'); s.style.width='100%'; s.style.height='100%'; s.style.display='block'; }
+    });
+  }).catch(()=>{});
+
+  // replay animation by re-inserting each <img> with its clean src (no query string)
+  document.getElementById('replay').addEventListener('click',()=>{
+    ['anim-a','anim-b','anim-c'].forEach((id,i)=>{
+      const o=document.getElementById(id); if(!o) return;
+      const clone=o.cloneNode(true);
+      setTimeout(()=>{ o.replaceWith(clone); }, i*220);
+    });
+  });
+</script>
+</body>
+</html>

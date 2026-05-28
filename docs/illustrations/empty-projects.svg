@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Fondo: no fill, transparente -->
+  <!-- Carpeta principal -->
+  <path d="M40 80 Q40 72 48 72 L88 72 L96 64 L152 64 Q160 64 160 72 L160 140 Q160 148 152 148 L48 148 Q40 148 40 140 Z"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Interior de carpeta (rejilla de docs) -->
+  <rect x="60" y="92" width="28" height="36" rx="3"
+        stroke="currentColor" stroke-width="1.5"/>
+  <line x1="64" y1="101" x2="84" y2="101" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="64" y1="108" x2="84" y2="108" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="64" y1="115" x2="76" y2="115" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <!-- Segundo doc -->
+  <rect x="96" y="88" width="28" height="36" rx="3"
+        stroke="currentColor" stroke-width="1.5"/>
+  <line x1="100" y1="97" x2="120" y2="97" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="100" y1="104" x2="120" y2="104" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <line x1="100" y1="111" x2="112" y2="111" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <!-- Estrella/plus decorativo -->
+  <line x1="100" y1="40" x2="100" y2="52" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="94" y1="46" x2="106" y2="46" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Puntos orbitales decorativos -->
+  <circle cx="36" cy="110" r="3" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="164" cy="100" r="2" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="155" cy="58" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+</svg>

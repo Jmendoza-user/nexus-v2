@@ -1,0 +1,6 @@
+{
+  "name": "@nexus/workers-py",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEXUS V2.0 Python workers (placeholder, not an npm package)"
+}

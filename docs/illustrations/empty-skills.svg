@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Rayo/Zap central -->
+  <path d="M112 36 L84 104 L100 104 L88 164 L124 88 L108 88 Z"
+        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Círculos orbitales (skills disponibles) -->
+  <circle cx="100" cy="100" r="52" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4"/>
+  <!-- Nodos en órbita -->
+  <circle cx="100" cy="48" r="6" stroke="currentColor" stroke-width="1.5"/>
+  <rect x="141" y="121" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/>
+  <circle cx="52" cy="124" r="5" stroke="currentColor" stroke-width="1.5"/>
+  <!-- Líneas de conexión desde nodos al centro (rotas = no instaladas) -->
+  <line x1="100" y1="54" x2="100" y2="70" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="3 3"/>
+  <line x1="140" y1="127" x2="122" y2="115" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="3 3"/>
+  <line x1="57" y1="121" x2="76" y2="110" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="3 3"/>
+  <!-- Plus en el centro inferior -->
+  <line x1="100" y1="158" x2="100" y2="170" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="94" y1="164" x2="106" y2="164" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
