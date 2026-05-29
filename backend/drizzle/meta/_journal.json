@@ -57,6 +57,13 @@
       "when": 1780033607445,
       "tag": "0007_familiar_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780035251167,
+      "tag": "0008_nostalgic_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,13 @@ import { useState, useEffect } from 'react';
 import { Avatar, Btn, Chip, IconBtn, ListRow, TopBar, QuotaRow } from '../ui';
 import { Icon } from '../lib/icons';
 import { NX } from '../lib/data';
-import { api, type NotificationView } from '../lib/api';
+import {
+  api,
+  BillingNotConfiguredError,
+  type NotificationView,
+  type PlanView,
+  type SubscriptionView,
+} from '../lib/api';
 import type { Nav } from './types';
 
 type Any = any;
@@ -35,7 +41,81 @@ function timeLabel(iso: string | null): string {
   return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Formatea el precio de un plan para el encabezado de la card. */
+function planPrice(p: PlanView): { price: string; period: string } {
+  if (p.priceCop <= 0) return { price: '$0', period: 'siempre' };
+  return { price: '$' + p.priceCop.toLocaleString('es-CO'), period: '/ mes · COP' };
+}
+
+const TIER_ORDER: Record<string, number> = { free: 0, pro: 1, team: 2 };
+
 function UpgradeScreen({ nav }: { nav: Nav }) {
+  const [plans, setPlans] = useState<PlanView[]>([]);
+  const [sub, setSub] = useState<SubscriptionView | null>(null);
+  const [mpConfigured, setMpConfigured] = useState(false);
+  const [canSimulate, setCanSimulate] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function refresh() {
+    try {
+      const [pl, su] = await Promise.all([api.plans(), api.subscription()]);
+      setPlans(pl.plans);
+      setMpConfigured(pl.mpConfigured);
+      setSub(su.subscription);
+    } catch { /* deja vacío */ } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void refresh(); }, []);
+
+  const currentTier = sub?.tier ?? 'free';
+
+  async function change(tier: 'pro' | 'team', simulate: boolean) {
+    if (busy) return;
+    setBusy(tier);
+    try {
+      const res = await api.checkout(tier, simulate);
+      if (res.checkoutUrl) {
+        window.location.href = res.checkoutUrl; // MP real
+        return;
+      }
+      if (res.simulated) {
+        nav.toast(`Plan cambiado a ${tier === 'pro' ? 'Pro' : 'Team'}`, 'check-circle', 'success');
+        await refresh();
+      }
+    } catch (err) {
+      if (err instanceof BillingNotConfiguredError) {
+        setCanSimulate(err.canSimulate);
+        nav.toast('Pagos próximamente', 'clock', 'accent');
+      } else {
+        nav.toast('No se pudo iniciar el cambio', 'x-circle', 'danger');
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // El botón "Simular cambio" solo aparece si el backend lo permite (dev) y MP
+  // aún no está configurado. Se descubre tras un primer intento de checkout o
+  // si el catálogo dice que MP no está activo.
+  const simulationAvailable = !mpConfigured && canSimulate;
+  const isPaidPlan = currentTier === 'pro' || currentTier === 'team';
+
+  async function cancel() {
+    if (busy) return;
+    setBusy('cancel');
+    try {
+      const res = await api.cancelPlan();
+      setSub(res.subscription);
+      nav.toast('Tu plan se cancelará al fin del periodo', 'check-circle', 'success');
+    } catch {
+      nav.toast('No se pudo cancelar el plan', 'x-circle', 'danger');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="col" style={{ height: '100%' }}>
       <TopBar left={<IconBtn name="arrow-left" onClick={() => nav.back()} />} title="Planes" right={<span style={{ width: 44 }} />} />
@@ -44,41 +124,84 @@ function UpgradeScreen({ nav }: { nav: Nav }) {
           <h1 className="t-2xl fw7" style={{ margin: 0 }}>Mejora tu NEXUS</h1>
           <p className="t-sm tsec" style={{ margin: 0, maxWidth: 280 }}>J4 cubre el costo de IA en los planes pagos. Cambia cuando quieras.</p>
         </div>
-        <div className="col gap3">
-          {NX.plans.map((p: Any) => (
-            <div key={p.id} className="card card-pad col gap3" style={{ position: 'relative', borderColor: p.popular ? 'var(--accent)' : 'var(--border-subtle)', boxShadow: p.popular ? '0 0 0 1px var(--accent), var(--shadow-card)' : 'var(--shadow-card)' }}>
-              {p.popular && <span className="chip accent" style={{ position: 'absolute', top: -11, left: 16, height: 22 }}><Icon name="sparkles" size={12} /> Recomendado</span>}
-              <div className="row between" style={{ alignItems: 'flex-start' }}>
-                <div className="col gap1">
-                  <span className="t-lg fw7">{p.name}</span>
-                  <span className="t-xs tsec">{p.model}</span>
-                </div>
-                <div className="col" style={{ alignItems: 'flex-end' }}>
-                  <span className="t-2xl fw7 display">{p.price}</span>
-                  <span className="t-xs tsec">{p.period}</span>
-                </div>
-              </div>
-              <div className="col gap2">
-                {p.features.map((f: string) => (
-                  <div key={f} className="row gap2 t-sm">
-                    <Icon name="check" size={16} color={p.popular ? 'var(--accent)' : 'var(--success)'} sw={2.4} />
-                    <span>{f}</span>
+        {loading ? (
+          <p className="t-sm tsec" style={{ padding: '8px 4px', textAlign: 'center' }}>Cargando planes…</p>
+        ) : (
+          <div className="col gap3">
+            {plans.map((p) => {
+              const isCurrent = p.tier === currentTier;
+              const { price, period } = planPrice(p);
+              const isUpgrade = (TIER_ORDER[p.tier] ?? 0) > (TIER_ORDER[currentTier] ?? 0);
+              const ctaLabel = isCurrent ? 'Tu plan actual' : isUpgrade ? `Cambiar a ${p.name}` : `Bajar a ${p.name}`;
+              const isPaid = p.priceCop > 0;
+              return (
+                <div key={p.tier} className="card card-pad col gap3" style={{ position: 'relative', borderColor: p.popular ? 'var(--accent)' : 'var(--border-subtle)', boxShadow: p.popular ? '0 0 0 1px var(--accent), var(--shadow-card)' : 'var(--shadow-card)' }}>
+                  {p.popular && <span className="chip accent" style={{ position: 'absolute', top: -11, left: 16, height: 22 }}><Icon name="sparkles" size={12} /> Recomendado</span>}
+                  <div className="row between" style={{ alignItems: 'flex-start' }}>
+                    <div className="col gap1">
+                      <span className="t-lg fw7">{p.name}</span>
+                      <span className="t-xs tsec">USD ${p.priceUsd} aprox.</span>
+                    </div>
+                    <div className="col" style={{ alignItems: 'flex-end' }}>
+                      <span className="t-2xl fw7 display">{price}</span>
+                      <span className="t-xs tsec">{period}</span>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <Btn variant={p.current ? 'secondary' : p.popular ? 'primary' : 'secondary'} size="lg" full
-                onClick={() => p.current ? null : nav.toast(`Abriendo MercadoPago…`, 'credit-card', 'accent')}
-                style={p.current ? { pointerEvents: 'none', opacity: 0.7 } : {}}>
-                {p.current ? '✓ Tu plan actual' : p.cta}
-              </Btn>
-            </div>
-          ))}
-        </div>
-        <p className="t-xs tter center" style={{ textAlign: 'center', marginTop: 18, textWrap: 'pretty' }}>Pagos seguros vía MercadoPago en COP o USD. Sin permanencia.</p>
+                  <div className="col gap2">
+                    {p.features.map((f) => (
+                      <div key={f} className="row gap2 t-sm">
+                        <Icon name="check" size={16} color={p.popular ? 'var(--accent)' : 'var(--success)'} sw={2.4} />
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {isCurrent ? (
+                    <Btn variant="secondary" size="lg" full style={{ pointerEvents: 'none', opacity: 0.7 }}>
+                      <Icon name="check" size={18} /> Tu plan actual
+                    </Btn>
+                  ) : !isPaid ? (
+                    <Btn variant="secondary" size="lg" full disabled={busy !== null}
+                      onClick={() => change('pro', simulationAvailable)} style={{ visibility: 'hidden' }}>—</Btn>
+                  ) : (
+                    <div className="col gap2">
+                      <Btn variant={p.popular ? 'primary' : 'secondary'} size="lg" full disabled={busy !== null}
+                        onClick={() => change(p.tier as 'pro' | 'team', false)}>
+                        {busy === p.tier ? 'Procesando…' : ctaLabel}
+                      </Btn>
+                      {simulationAvailable && (
+                        <Btn variant="ghost" size="sm" full disabled={busy !== null}
+                          onClick={() => change(p.tier as 'pro' | 'team', true)}>
+                          <Icon name="zap" size={15} /> Simular cambio (dev)
+                        </Btn>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {!loading && isPaidPlan && (
+          sub?.cancelAtPeriodEnd ? (
+            <p className="t-xs tter center" style={{ textAlign: 'center', marginTop: 16 }}>
+              Tu plan {TIER_LABEL_UP[currentTier]} se cancelará al fin del periodo.
+            </p>
+          ) : (
+            <button className="btn btn-ghost btn-md btn-block" style={{ color: 'var(--danger)', marginTop: 12 }}
+              disabled={busy !== null} onClick={() => { void cancel(); }}>
+              {busy === 'cancel' ? 'Cancelando…' : 'Cancelar plan'}
+            </button>
+          )
+        )}
+        <p className="t-xs tter center" style={{ textAlign: 'center', marginTop: 18, textWrap: 'pretty' }}>
+          {mpConfigured ? 'Pagos seguros vía MercadoPago en COP o USD. Sin permanencia.' : 'Pagos vía MercadoPago próximamente. Sin permanencia.'}
+        </p>
       </div>
     </div>
   );
 }
+
+const TIER_LABEL_UP: Record<string, string> = { free: 'Free', pro: 'Pro', team: 'Team' };
 
 function NotifsScreen({ nav }: { nav: Nav }) {
   const [items, setItems] = useState<NotificationView[]>([]);

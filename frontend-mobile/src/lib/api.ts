@@ -375,6 +375,48 @@ export interface ScrapeResult {
   url: string;
 }
 
+// ── Billing / Planes (Hito 5) ────────────────────────────────────────────────
+export interface PlanView {
+  tier: 'free' | 'pro' | 'team';
+  name: string;
+  priceCop: number;
+  priceUsd: string;
+  features: string[];
+  popular: boolean;
+  sortOrder: number;
+  mpPreapprovalPlanId: string | null;
+}
+
+export interface SubscriptionView {
+  orgId: string;
+  tier: string;
+  status: string;
+  provider: string;
+  providerSubId: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  plan: PlanView | null;
+  quotas: { metric: 'messages' | 'voice_seconds' | 'vault_bytes'; limit: number; used: number; period: string }[];
+}
+
+export interface CheckoutResponse {
+  ok: boolean;
+  simulated?: boolean;
+  checkoutUrl?: string;
+  preferenceId?: string;
+  subscription?: SubscriptionView;
+}
+
+/** Lanzado cuando el backend no tiene MercadoPago configurado (503). */
+export class BillingNotConfiguredError extends Error {
+  status = 503 as const;
+  constructor(public canSimulate: boolean, message: string) {
+    super(message);
+    this.name = 'BillingNotConfiguredError';
+  }
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const api = {
   login(email: string, password: string): Promise<AuthResult> {
@@ -620,6 +662,39 @@ export const api = {
   // ── Scraping ─────────────────────────────────────────────────────────────────
   scrape(url: string, opts?: { selector?: string; waitFor?: string }): Promise<ScrapeResult> {
     return jsonFetch<ScrapeResult>('/api/scrape/run', { method: 'POST', body: JSON.stringify({ url, ...(opts ?? {}) }) });
+  },
+
+  // ── Billing / Planes ────────────────────────────────────────────────────────
+  plans(): Promise<{ plans: PlanView[]; mpConfigured: boolean }> {
+    return jsonFetch<{ plans: PlanView[]; mpConfigured: boolean }>('/api/billing/plans');
+  },
+
+  subscription(): Promise<{ subscription: SubscriptionView }> {
+    return jsonFetch<{ subscription: SubscriptionView }>('/api/billing/subscription');
+  },
+
+  /**
+   * Inicia el checkout de un plan. Si MercadoPago no está configurado lanza
+   * BillingNotConfiguredError (con canSimulate). Con simulate=true (solo dev)
+   * aplica el cambio directamente y devuelve la nueva suscripción.
+   */
+  async checkout(tier: 'pro' | 'team', simulate = false): Promise<CheckoutResponse> {
+    const res = await fetch(`/api/billing/checkout${simulate ? '?simulate=1' : ''}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.status === 503 && (data as Any)?.error === 'billing_not_configured') {
+      throw new BillingNotConfiguredError(Boolean((data as Any)?.canSimulate), (data as Any)?.message ?? 'Pagos no disponibles.');
+    }
+    if (!res.ok) throw makeError(res.status, (data as Any)?.error || `HTTP ${res.status}`, data);
+    return data as CheckoutResponse;
+  },
+
+  cancelPlan(): Promise<{ ok: boolean; subscription: SubscriptionView }> {
+    return jsonFetch<{ ok: boolean; subscription: SubscriptionView }>('/api/billing/cancel', { method: 'POST' });
   },
 
   /** Sintetiza voz y devuelve un Blob audio/mpeg listo para reproducir. */

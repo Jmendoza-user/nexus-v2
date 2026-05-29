@@ -18,6 +18,7 @@ import { scrapeRouter } from './routes/scrape.js';
 import { monitorsRouter } from './routes/monitors.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { telegramApiRouter, telegramWebhookRouter } from './routes/telegram.js';
+import { billingRouter, billingPublicRouter, billingWebhookRouter } from './routes/billing.js';
 import { PathTraversalError } from './services/userEnv.js';
 
 export function createApp() {
@@ -45,10 +46,19 @@ export function createApp() {
   app.use('/api/voice', voiceRouter);
   app.use('/api/vault', vaultRouter);
   app.use('/api/telegram', telegramApiRouter);
+  // Billing: /plans es público (catálogo); /subscription, /checkout, /cancel
+  // exigen sesión. El router público se monta primero para que /plans no choque
+  // con el authJwt del router authed.
+  app.use('/api/billing', billingPublicRouter);
+  app.use('/api/billing', billingRouter);
 
   // Webhook PÚBLICO de Telegram (fuera de /api, sin authJwt). Protegido por
   // secret en el path/header. INACTIVO hasta configurar el bot dedicado.
   app.use('/tg/webhook', telegramWebhookRouter);
+
+  // Webhook PÚBLICO de MercadoPago (fuera de /api, sin authJwt). Valida firma
+  // cuando exista secret. INACTIVO (ACK 200 sin procesar) hasta tener token.
+  app.use('/billing/webhook/mp', billingWebhookRouter);
 
   // 404 para rutas no encontradas bajo /api.
   app.use('/api', (_req: Request, res: Response) => {

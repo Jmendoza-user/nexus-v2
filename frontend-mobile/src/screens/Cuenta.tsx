@@ -16,16 +16,29 @@ import {
   type ConnectionProvider,
   type UserProfile,
   type UsageResponse,
+  type SubscriptionView,
 } from '../lib/api';
 import type { Nav } from './types';
 
 type Any = any;
 
+const TIER_LABEL: Record<string, string> = { free: 'Free', pro: 'Pro', team: 'Team' };
+
 function CuentaScreen({ nav }: { nav: Nav }) {
   const [unread, setUnread] = useState(0);
+  const [sub, setSub] = useState<SubscriptionView | null>(null);
   useEffect(() => {
     api.notifications().then((r) => setUnread(r.unread)).catch(() => setUnread(0));
+    api.subscription().then((r) => setSub(r.subscription)).catch(() => setSub(null));
   }, []);
+  const planName = sub ? (TIER_LABEL[sub.tier] ?? sub.tier) : NX.user.plan;
+  const billingSub = sub
+    ? sub.cancelAtPeriodEnd
+      ? 'Se cancela al fin del periodo'
+      : sub.currentPeriodEnd
+        ? `${planName} · renueva ${new Date(sub.currentPeriodEnd).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`
+        : `Plan ${planName}`
+    : 'Plan y facturación';
   return (
     <div className="col" style={{ height: '100%' }}>
       <div className="topbar">
@@ -41,7 +54,7 @@ function CuentaScreen({ nav }: { nav: Nav }) {
             <span className="t-sm tsec">{NX.user.email}</span>
           </div>
           <div className="row gap2">
-            <Chip tone="accent" icon="sparkles">Plan {NX.user.plan}</Chip>
+            <Chip tone="accent" icon="sparkles">Plan {planName}</Chip>
             <Chip>{NX.user.org}</Chip>
           </div>
         </div>
@@ -65,7 +78,7 @@ function CuentaScreen({ nav }: { nav: Nav }) {
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
-          <ListRow icon="crown" title="Plan y facturación" sub="Pro · próxima factura 28 jun" onClick={() => nav.push('upgrade')} />
+          <ListRow icon="crown" title="Plan y facturación" sub={billingSub} onClick={() => nav.push('upgrade')} />
           <ListRow icon="settings" title="Preferencias" sub="Idioma, tema, notificaciones" onClick={() => nav.push('preferencias')} />
         </div>
 

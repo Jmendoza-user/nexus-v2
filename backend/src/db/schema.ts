@@ -211,6 +211,73 @@ export const tierPolicies = pgTable('tier_policies', {
   quotaVaultBytes: bigint('quota_vault_bytes', { mode: 'number' }).notNull(),
 });
 
+/**
+ * plans — catálogo comercial de planes (Hito 5, monetización).
+ *
+ * NO está scoped por tenant: es un catálogo público (como tier_policies). Una
+ * fila por tier (free | pro | team). Mientras tier_policies es la fuente técnica
+ * (cuotas/modelos/adapters), `plans` es la cara COMERCIAL: precios en COP/USD,
+ * nombre comercial, features narrativas para la pantalla de upgrade, y el
+ * provider_plan_id de MercadoPago (preapproval plan) cuando exista.
+ *
+ * Las `features` se siembran derivando los límites de tier_policies (mensajes,
+ * voz, vault) + diferenciales del tier, en prosa lista para la UI. price_cop = 0
+ * en free. mp_preapproval_plan_id NULL hasta que Jerson cree los planes en MP.
+ */
+const priceUsdType = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return 'numeric(10, 2)';
+  },
+});
+
+export const plans = pgTable('plans', {
+  tier: text('tier').primaryKey(), // free | pro | team (FK lógica a tier_policies.tier)
+  name: text('name').notNull(),
+  priceCop: integer('price_cop').notNull().default(0),
+  priceUsd: priceUsdType('price_usd').notNull().default('0'),
+  features: jsonb('features').notNull().default(sql`'[]'::jsonb`),
+  popular: boolean('popular').notNull().default(false),
+  sortOrder: integer('sort_order').notNull().default(0),
+  mpPreapprovalPlanId: text('mp_preapproval_plan_id'),
+});
+
+/**
+ * billing_events — bitácora de eventos de facturación (Hito 5, scoped por org).
+ *
+ * Fuente única de auditoría del ciclo de vida de la suscripción: webhooks de
+ * MercadoPago (payment.approved, subscription.updated/cancelled), cambios
+ * simulados (DEV) y acciones del usuario (checkout/cancel). Idempotente por
+ * provider_event_id (UNIQUE parcial donde no es NULL): re-procesar el mismo
+ * webhook no duplica ni re-aplica.
+ *
+ * - event_type: payment.approved | subscription.updated | subscription.cancelled
+ *               | tier.changed | checkout.created | simulated.change ...
+ * - provider: mercadopago | simulated | manual.
+ * - provider_event_id: id del evento/notification de MP (para idempotencia).
+ * - payload: cuerpo crudo del webhook o contexto del evento interno.
+ * - processed: true cuando el evento fue aplicado a subscriptions/tier.
+ */
+export const billingEvents = pgTable(
+  'billing_events',
+  {
+    id: uuidPk(),
+    orgId: uuid('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull().default('mercadopago'), // mercadopago | simulated | manual
+    eventType: text('event_type').notNull(),
+    providerEventId: text('provider_event_id'),
+    payload: jsonb('payload').notNull().default(sql`'{}'::jsonb`),
+    processed: boolean('processed').notNull().default(false),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('billing_events_org_idx').on(t.orgId, t.receivedAt.desc()),
+    // Idempotencia: un mismo provider_event_id no se inserta dos veces (parcial:
+    // sólo aplica a filas con provider_event_id NOT NULL — eventos internos sin id
+    // no chocan). El WHERE del índice se añade en la migración SQL.
+    uniqueIndex('billing_events_provider_event_unique').on(t.providerEventId),
+  ]
+);
+
 // ──────────────────────────────────────────────────────────────────────────
 // DOMINIO REPRESENTATIVO (para probar aislamiento de tenant)
 // ──────────────────────────────────────────────────────────────────────────
@@ -664,6 +731,9 @@ export type Project = typeof projects.$inferSelect;
 export type Issue = typeof issues.$inferSelect;
 export type UsageQuota = typeof usageQuotas.$inferSelect;
 export type TierPolicy = typeof tierPolicies.$inferSelect;
+export type Plan = typeof plans.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type BillingEvent = typeof billingEvents.$inferSelect;
 export type VaultChunk = typeof vaultChunks.$inferSelect;
 export type TelegramPairing = typeof telegramPairings.$inferSelect;
 export type SkillCatalogEntry = typeof skillsCatalog.$inferSelect;

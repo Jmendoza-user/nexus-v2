@@ -60,6 +60,18 @@ export const env = {
 
   // Binario CLI (ClaudeCliAdapter — uso pesado en hitos siguientes).
   CLAUDE_CLI_BINARY: process.env.CLAUDE_CLI_BINARY ?? 'claude',
+
+  // ── MercadoPago (monetización — Hito 5, SEAM inactivo sin token) ──────────
+  // Si MERCADOPAGO_ACCESS_TOKEN está vacío, el módulo billing responde 503
+  // "billing_not_configured" en checkout y el webhook hace ACK sin procesar.
+  // En sandbox usar el token TEST-*, en prod el token APP_USR-*.
+  MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN ?? '',
+  MERCADOPAGO_PUBLIC_KEY: process.env.MERCADOPAGO_PUBLIC_KEY ?? '',
+  // Secret de validación de webhooks (x-signature de MP). Vacío = sin validar.
+  MERCADOPAGO_WEBHOOK_SECRET: process.env.MERCADOPAGO_WEBHOOK_SECRET ?? '',
+  // Base pública de la PWA, para construir back_urls / notification_url de MP.
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL ?? 'https://metis.j4smartsolutions.com',
+
   get isProd() {
     return this.NODE_ENV === 'production';
   },
