@@ -18,17 +18,29 @@ import {
   orgMembers,
   userSettings,
   usageQuotas,
+  tierPolicies,
 } from '../db/schema.js';
 import { provisionUserEnv } from './userEnv.js';
 
 const BCRYPT_ROUNDS = 12;
 
-/** Cuotas base por tier para el periodo actual (metric → limit). */
-const TIER_QUOTAS: Record<string, Record<string, number>> = {
-  free: { messages: 200, voice_seconds: 600, vault_bytes: 52_428_800 }, // 50 MB
-  pro: { messages: 5000, voice_seconds: 18_000, vault_bytes: 2_147_483_648 }, // 2 GB
-  team: { messages: 25_000, voice_seconds: 90_000, vault_bytes: 10_737_418_240 }, // 10 GB
-};
+/**
+ * Cuotas base por tier. FUENTE ÚNICA DE VERDAD = tier_policies (DB).
+ * Se leen en runtime para no duplicar valores; el fallback solo cubre el caso
+ * (improbable) de que tier_policies aún no esté sembrada.
+ */
+async function tierQuotas(tier: string): Promise<Record<string, number>> {
+  const [p] = await db.select().from(tierPolicies).where(eq(tierPolicies.tier, tier)).limit(1);
+  if (p) {
+    return {
+      messages: Number(p.quotaMessages),
+      voice_seconds: Number(p.quotaVoiceSeconds),
+      vault_bytes: Number(p.quotaVaultBytes),
+    };
+  }
+  // Fallback defensivo (tier_policies sin sembrar): valores conservadores free.
+  return { messages: 200, voice_seconds: 0, vault_bytes: 200 * 1024 * 1024 };
+}
 
 export class AuthError extends Error {
   constructor(public status: number, message: string) {
@@ -76,6 +88,7 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
 
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
   const tier = 'free';
+  const quotas = await tierQuotas(tier);
 
   const result = await db.transaction(async (tx) => {
     // 1. Crear usuario (default_org_id se rellena después).
@@ -109,7 +122,6 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
 
     // 5. Cuotas del periodo actual (a nivel org, user_id NULL = global de la org).
     const period = currentPeriod();
-    const quotas = TIER_QUOTAS[tier]!;
     await tx.insert(usageQuotas).values(
       Object.entries(quotas).map(([metric, limitValue]) => ({
         orgId: org.id,

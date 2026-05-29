@@ -11,7 +11,6 @@ import { z } from 'zod';
 import { agents } from '../db/schema.js';
 import { authJwt } from '../middleware/auth.js';
 import { tenantContext } from '../middleware/tenant.js';
-import { quotaCheck } from '../middleware/tenant.js';
 
 export const agentsRouter = Router();
 
@@ -52,7 +51,8 @@ agentsRouter.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/agents — crea para el user/org actual.
-agentsRouter.post('/', quotaCheck('messages'), async (req: Request, res: Response) => {
+// (Crear un agente no consume cuota de mensajes; el chat sí — ver routes/assistant.ts.)
+agentsRouter.post('/', async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Datos inválidos.', issues: parsed.error.flatten().fieldErrors });

@@ -46,18 +46,7 @@ export async function tenantContext(
   }
 }
 
-/**
- * quotaCheck — STUB documentado (Hito siguiente).
- *
- * TODO-DEUDA(quota-check): implementar enforcement real. Debe:
- *  - resolver la cuota (org_id, period actual, metric) en usage_quotas,
- *  - estimar el costo de la operación con costFn(req),
- *  - si used + costo > limit → 402 con { error, upgradeUrl },
- *  - en éxito, incrementar used tras la operación (o reservar/confirmar).
- * Por ahora es passthrough para no bloquear el desarrollo del Hito 0.
- */
-export function quotaCheck(_metric: string, _costFn?: (req: Request) => number) {
-  return (_req: Request, _res: Response, next: NextFunction): void => {
-    next();
-  };
-}
+// quotaCheck vive ahora en middleware/quota.ts (enforcement real, Hito 1).
+// Se re-exporta aquí por compatibilidad con imports existentes.
+export { quotaCheck, recordUsage, ensureQuotaRow, currentPeriod } from './quota.js';
+export type { QuotaMetric } from './quota.js';

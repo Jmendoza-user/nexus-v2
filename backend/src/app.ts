@@ -6,6 +6,8 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import cookieParser from 'cookie-parser';
 import { authRouter } from './routes/auth.js';
 import { agentsRouter } from './routes/agents.js';
+import { assistantRouter } from './routes/assistant.js';
+import { voiceRouter } from './routes/voice.js';
 import { PathTraversalError } from './services/userEnv.js';
 
 export function createApp() {
@@ -20,6 +22,8 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/agents', agentsRouter);
+  app.use('/api/assistant', assistantRouter);
+  app.use('/api/voice', voiceRouter);
 
   // 404 para rutas no encontradas bajo /api.
   app.use('/api', (_req: Request, res: Response) => {

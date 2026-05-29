@@ -14,6 +14,7 @@ import { db, pool } from './index.js';
 import { users, agents, projects, issues } from './schema.js';
 import { registerUser } from '../services/auth.js';
 import { provisionUserEnv } from '../services/userEnv.js';
+import { seedTierPolicies } from './seedTierPolicies.js';
 
 export const SEED_USERS = {
   A: { email: 'seed-a@nexus.test', password: 'passwordA123', displayName: 'Usuario A', tier: 'free' },
@@ -93,6 +94,7 @@ async function seedDomainFor(
 }
 
 export async function runSeed(): Promise<{ A: SeededUser; B: SeededUser }> {
+  await seedTierPolicies(); // garantiza catálogo de tiers para pickAdapter/quota
   await wipeExisting();
 
   const a = await registerUser(SEED_USERS.A);

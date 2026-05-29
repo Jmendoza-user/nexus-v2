@@ -147,6 +147,23 @@ export const usageQuotas = pgTable(
   ]
 );
 
+/**
+ * tier_policies — política por tier (catálogo, no scoped por tenant).
+ *
+ * Fuente de verdad de: adapter/modelo por defecto, adapters permitidos y
+ * cuotas base. usage_quotas y AgentRunner.pickAdapter() leen de aquí.
+ * Se siembra una vez (idempotente) en la migración / seed.
+ */
+export const tierPolicies = pgTable('tier_policies', {
+  tier: text('tier').primaryKey(), // free | pro | team
+  defaultAdapter: text('default_adapter').notNull().default('opencode'),
+  defaultModel: text('default_model').notNull(),
+  allowedAdapters: jsonb('allowed_adapters').notNull().default(sql`'["opencode"]'::jsonb`),
+  quotaMessages: bigint('quota_messages', { mode: 'number' }).notNull(),
+  quotaVoiceSeconds: bigint('quota_voice_seconds', { mode: 'number' }).notNull(),
+  quotaVaultBytes: bigint('quota_vault_bytes', { mode: 'number' }).notNull(),
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // DOMINIO REPRESENTATIVO (para probar aislamiento de tenant)
 // ──────────────────────────────────────────────────────────────────────────
@@ -227,3 +244,4 @@ export type Agent = typeof agents.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Issue = typeof issues.$inferSelect;
 export type UsageQuota = typeof usageQuotas.$inferSelect;
+export type TierPolicy = typeof tierPolicies.$inferSelect;

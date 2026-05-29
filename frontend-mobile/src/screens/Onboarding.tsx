@@ -6,6 +6,7 @@ import { Btn, Chip, IconBtn, Toggle } from '../ui';
 import { Icon } from '../lib/icons';
 import { NX } from '../lib/data';
 import { AuraVisualizer } from '../components/AuraVisualizer';
+import { api, type ApiError } from '../lib/api';
 
 type Any = any;
 
@@ -20,6 +21,34 @@ function Dots({ n, i }: { n: number; i: number }) {
 }
 
 function LoginScreen({ onLogin, onOnboard }: { onLogin: () => void; onOnboard: () => void }) {
+  const [email, setEmail] = useState('jersonmendoza@eyesa.com.co');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (busy) return;
+    setError(null);
+    if (!email.trim() || !password) {
+      setError('Ingresa tu correo y contraseña.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.login(email.trim(), password);
+      onLogin();
+    } catch (err) {
+      const e = err as ApiError;
+      setError(e.status === 401 ? 'Correo o contraseña incorrectos.' : (e.message || 'No se pudo iniciar sesión.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onKeyDown(ev: React.KeyboardEvent) {
+    if (ev.key === 'Enter') submit();
+  }
+
   return (
     <div className="col" style={{ height: '100%', padding: '0 28px', justifyContent: 'center' }}>
       <div className="col gap6" style={{ marginBottom: 40 }}>
@@ -32,9 +61,10 @@ function LoginScreen({ onLogin, onOnboard }: { onLogin: () => void; onOnboard: (
         </div>
       </div>
       <div className="col gap3">
-        <div><label className="field-label">Correo</label><input className="field" defaultValue="jersonmendoza@eyesa.com.co" /></div>
-        <div><label className="field-label">Contraseña</label><input className="field" type="password" defaultValue="••••••••••" /></div>
-        <Btn variant="primary" size="lg" full onClick={onLogin} style={{ marginTop: 8 }}>Entrar</Btn>
+        <div><label className="field-label">Correo</label><input className="field" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onKeyDown} /></div>
+        <div><label className="field-label">Contraseña</label><input className="field" type="password" autoComplete="current-password" placeholder="Tu contraseña" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onKeyDown} /></div>
+        {error && <p className="t-sm" style={{ margin: 0, color: 'var(--danger)' }}>{error}</p>}
+        <Btn variant="primary" size="lg" full onClick={submit} disabled={busy} style={{ marginTop: 8 }}>{busy ? 'Entrando…' : 'Entrar'}</Btn>
         <Btn variant="secondary" size="lg" full><Icon name="globe" size={18} /> Continuar con Google</Btn>
       </div>
       <button className="btn btn-ghost btn-md" style={{ marginTop: 22, alignSelf: 'center' }} onClick={onOnboard}>
@@ -52,8 +82,47 @@ const ONB = [
 function Onboarding({ onDone, accent }: { onDone: () => void; accent: string }) {
   const [i, setI] = useState(0);
   const [plan, setPlan] = useState('pro');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('Jerson Mendoza');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const step = ONB[i].key;
-  const next = () => i < ONB.length - 1 ? setI(i + 1) : onDone();
+
+  async function finish() {
+    // Registra al cerrar el onboarding. Si ya existe sesión/datos, onDone igual.
+    setError(null);
+    if (email.trim() && password) {
+      setBusy(true);
+      try {
+        await api.register(email.trim(), password, name.trim() || email.split('@')[0]!);
+      } catch (err) {
+        const e = err as ApiError;
+        // 409 = ya existe; lo tratamos como "ya tienes cuenta", seguimos.
+        if (e.status !== 409) {
+          setError(e.message || 'No se pudo crear la cuenta.');
+          setBusy(false);
+          return;
+        }
+      }
+      setBusy(false);
+    }
+    onDone();
+  }
+
+  const next = () => {
+    if (i < ONB.length - 1) {
+      // Validación mínima en el paso de cuenta (sin alterar el diseño).
+      if (step === 'cuenta' && (!email.trim() || password.length < 8)) {
+        setError('Correo válido y contraseña de al menos 8 caracteres.');
+        return;
+      }
+      setError(null);
+      setI(i + 1);
+    } else {
+      void finish();
+    }
+  };
   const back = () => i > 0 && setI(i - 1);
 
   return (
@@ -76,8 +145,9 @@ function Onboarding({ onDone, accent }: { onDone: () => void; accent: string }) 
         )}
         {step === 'cuenta' && (
           <OnbBody title="Crea tu cuenta" sub="Te toma menos de un minuto.">
-            <div><label className="field-label">Correo</label><input className="field" placeholder="tucorreo@ejemplo.com" /></div>
-            <div><label className="field-label">Contraseña</label><input className="field" type="password" placeholder="Mínimo 8 caracteres" /></div>
+            <div><label className="field-label">Correo</label><input className="field" type="email" autoComplete="email" placeholder="tucorreo@ejemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div><label className="field-label">Contraseña</label><input className="field" type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            {error && <p className="t-sm" style={{ margin: 0, color: 'var(--danger)' }}>{error}</p>}
             <label className="row gap2 t-sm tsec" style={{ marginTop: 4 }}>
               <span style={{ width: 22, height: 22, borderRadius: 6, border: '2px solid var(--accent)', background: 'var(--accent)', display: 'flex' }}><Icon name="check" size={14} sw={3} color="#fff" /></span>
               Acepto los términos y la política de privacidad
@@ -86,7 +156,7 @@ function Onboarding({ onDone, accent }: { onDone: () => void; accent: string }) 
         )}
         {step === 'perfil' && (
           <OnbBody title="Cuéntame de ti" sub="Para personalizar tu asistente.">
-            <div><label className="field-label">Nombre</label><input className="field" defaultValue="Jerson Mendoza" /></div>
+            <div><label className="field-label">Nombre</label><input className="field" value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div><label className="field-label">Idioma</label><input className="field" defaultValue="Español (Colombia)" /></div>
             <div><label className="field-label">Zona horaria</label><input className="field" defaultValue="América/Bogotá (GMT-5)" /></div>
           </OnbBody>
@@ -158,8 +228,9 @@ function Onboarding({ onDone, accent }: { onDone: () => void; accent: string }) 
       </div>
 
       <div style={{ padding: '12px 28px calc(16px + env(safe-area-inset-bottom))' }}>
-        <Btn variant="primary" size="lg" full onClick={next}>
-          {step === 'bienvenida' ? 'Empezar' : step === 'listo' ? 'Ir a NEXUS' : step === 'plan' ? `Continuar con ${plan === 'pro' ? 'Pro' : 'Free'}` : 'Continuar'}
+        {step === 'listo' && error && <p className="t-sm" style={{ margin: '0 0 8px', color: 'var(--danger)', textAlign: 'center' }}>{error}</p>}
+        <Btn variant="primary" size="lg" full onClick={next} disabled={busy}>
+          {busy ? 'Creando tu cuenta…' : step === 'bienvenida' ? 'Empezar' : step === 'listo' ? 'Ir a NEXUS' : step === 'plan' ? `Continuar con ${plan === 'pro' ? 'Pro' : 'Free'}` : 'Continuar'}
         </Btn>
       </div>
     </div>
