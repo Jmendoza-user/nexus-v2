@@ -107,6 +107,30 @@ export interface AgentItem {
   runtimeConfig: Record<string, unknown>;
 }
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  leadAgentId: string | null;
+  targetDate: string | null;
+  color: string | null;
+  createdAt: string;
+  issueCount: number;
+  doneCount: number;
+}
+
+export interface IssueItem {
+  id: string;
+  projectId: string | null;
+  identifier: string;
+  title: string;
+  status: 'open' | 'in_progress' | 'done' | 'canceled';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  assigneeAgentId: string | null;
+  createdAt: string;
+}
+
 export interface TelegramPairResponse {
   code: string;
   expiresAt: string;
@@ -456,6 +480,32 @@ export const api = {
   // ── Agentes ─────────────────────────────────────────────────────────────────
   agents(): Promise<{ agents: AgentItem[] }> {
     return jsonFetch<{ agents: AgentItem[] }>('/api/agents');
+  },
+
+  // ── Proyectos + Tareas ───────────────────────────────────────────────────────
+  projects(): Promise<{ projects: ProjectItem[] }> {
+    return jsonFetch<{ projects: ProjectItem[] }>('/api/projects');
+  },
+  project(id: string): Promise<{ project: ProjectItem; issues: IssueItem[] }> {
+    return jsonFetch<{ project: ProjectItem; issues: IssueItem[] }>(`/api/projects/${id}`);
+  },
+  createProject(body: { name: string; description?: string; color?: string; targetDate?: string }): Promise<{ project: ProjectItem }> {
+    return jsonFetch<{ project: ProjectItem }>('/api/projects', { method: 'POST', body: JSON.stringify(body) });
+  },
+  updateProject(id: string, patch: Partial<{ name: string; description: string | null; status: string; leadAgentId: string | null; targetDate: string | null; color: string | null }>): Promise<{ project: ProjectItem }> {
+    return jsonFetch<{ project: ProjectItem }>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+  deleteProject(id: string): Promise<{ ok: boolean }> {
+    return jsonFetch<{ ok: boolean }>(`/api/projects/${id}`, { method: 'DELETE' });
+  },
+  createIssue(projectId: string, body: { title: string; priority?: string; status?: string }): Promise<{ issue: IssueItem }> {
+    return jsonFetch<{ issue: IssueItem }>(`/api/projects/${projectId}/issues`, { method: 'POST', body: JSON.stringify(body) });
+  },
+  updateIssue(projectId: string, issueId: string, patch: Partial<{ title: string; status: string; priority: string; assigneeAgentId: string | null }>): Promise<{ issue: IssueItem }> {
+    return jsonFetch<{ issue: IssueItem }>(`/api/projects/${projectId}/issues/${issueId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+  deleteIssue(projectId: string, issueId: string): Promise<{ ok: boolean }> {
+    return jsonFetch<{ ok: boolean }>(`/api/projects/${projectId}/issues/${issueId}`, { method: 'DELETE' });
   },
 
   // ── Skills ────────────────────────────────────────────────────────────────

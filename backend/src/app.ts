@@ -6,6 +6,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import cookieParser from 'cookie-parser';
 import { authRouter } from './routes/auth.js';
 import { agentsRouter } from './routes/agents.js';
+import { projectsRouter } from './routes/projects.js';
 import { assistantRouter } from './routes/assistant.js';
 import { voiceRouter } from './routes/voice.js';
 import { vaultRouter } from './routes/vault.js';
@@ -35,6 +36,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/agents', agentsRouter);
+  app.use('/api/projects', projectsRouter);
   app.use('/api/skills', skillsRouter);
   app.use('/api/connections', connectionsRouter);
   app.use('/api/finanzas', finanzasRouter);
