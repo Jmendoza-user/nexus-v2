@@ -16,6 +16,7 @@ import {
   type ConnectionProvider,
   type UserProfile,
   type UsageResponse,
+  type MeResponse,
   type SubscriptionView,
 } from '../lib/api';
 import type { Nav } from './types';
@@ -27,11 +28,22 @@ const TIER_LABEL: Record<string, string> = { free: 'Free', pro: 'Pro', team: 'Te
 function CuentaScreen({ nav }: { nav: Nav }) {
   const [unread, setUnread] = useState(0);
   const [sub, setSub] = useState<SubscriptionView | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
   useEffect(() => {
     api.notifications().then((r) => setUnread(r.unread)).catch(() => setUnread(0));
     api.subscription().then((r) => setSub(r.subscription)).catch(() => setSub(null));
+    api.me().then(setMe).catch(() => {});
+    api.usage().then(setUsage).catch(() => {});
   }, []);
-  const planName = sub ? (TIER_LABEL[sub.tier] ?? sub.tier) : NX.user.plan;
+  const planName = sub
+    ? (TIER_LABEL[sub.tier] ?? sub.tier)
+    : me?.tier
+      ? (TIER_LABEL[me.tier] ?? me.tier)
+      : '—';
+  const dispName = me?.user.displayName ?? '—';
+  const dispEmail = me?.user.email ?? '';
+  const orgName = me?.org?.name ?? null;
   const billingSub = sub
     ? sub.cancelAtPeriodEnd
       ? 'Se cancela al fin del periodo'
@@ -48,31 +60,33 @@ function CuentaScreen({ nav }: { nav: Nav }) {
       <div className="grow" style={{ overflowY: 'auto', padding: '0 16px 24px' }}>
         {/* profile */}
         <div className="col center gap3" style={{ padding: '8px 0 20px', textAlign: 'center' }}>
-          <Avatar name={NX.user.name} size={76} />
+          <Avatar name={dispName} size={76} />
           <div className="col gap1" style={{ alignItems: 'center' }}>
-            <h1 className="t-2xl fw7" style={{ margin: 0 }}>{NX.user.name}</h1>
-            <span className="t-sm tsec">{NX.user.email}</span>
+            <h1 className="t-2xl fw7" style={{ margin: 0 }}>{dispName}</h1>
+            <span className="t-sm tsec">{dispEmail}</span>
           </div>
           <div className="row gap2">
             <Chip tone="accent" icon="sparkles">Plan {planName}</Chip>
-            <Chip>{NX.user.org}</Chip>
+            {orgName && <Chip>{orgName}</Chip>}
           </div>
         </div>
 
         {/* usage */}
         <div className="card card-pad col gap4" style={{ marginBottom: 20 }}>
           <div className="row between">
-            <span className="t-sm fw6">Uso de mayo</span>
+            <span className="t-sm fw6">Uso del mes</span>
             <button className="btn btn-ghost btn-sm" style={{ paddingRight: 0 }} onClick={() => nav.push('uso')}>Ver detalle</button>
           </div>
-          {NX.usage.map((u: Any) => <QuotaRow key={u.label} {...u} />)}
+          {usage
+            ? usage.quotas.map((q) => { const m = fmtMetric(q.metric, q.used, q.limit); return <QuotaRow key={m.label} {...m} />; })
+            : <p className="t-sm tsec" style={{ margin: 0 }}>Cargando…</p>}
         </div>
 
         {/* sections */}
         <div className="card" style={{ marginBottom: 16 }}>
           <ListRow icon="sparkles" title="Asistente principal" sub="Prompt, tono, voz" onClick={() => nav.push('principal')} />
-          <ListRow icon="bot" title="Mis agentes" sub="3 agentes activos" onClick={() => nav.push('agentes')} />
-          <ListRow icon="wrench" title="Skills y MCPs" sub="6 instaladas" onClick={() => nav.push('skills')} />
+          <ListRow icon="bot" title="Mis agentes" sub="Gestiona tus agentes" onClick={() => nav.push('agentes')} />
+          <ListRow icon="wrench" title="Skills y MCPs" sub="Instala y configura" onClick={() => nav.push('skills')} />
           <ListRow icon="link" title="Conexiones" sub="Gmail, Calendar, Telegram…" onClick={() => nav.push('conexiones')} />
           <ListRow icon="shield-check" title="Seguridad y privacidad" sub="Token Guard activo" onClick={() => nav.push('seguridad')} />
         </div>
@@ -433,11 +447,10 @@ function ConfigSeguridad({ nav }: { nav: Nav }) {
       </div>
 
       <div className="t-xs tter fw6 cap" style={cfgLbl}>Últimas redacciones</div>
-      <div className="card" style={{ marginBottom: 16 }}>
-        {NX.redactions.map((r: Any) => (
-          <ListRow key={r.id} icon="lock" title={r.type} sub={r.when} chevron={false}
-            right={<span className="mono t-sm tsec">{r.value}</span>} />
-        ))}
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <p className="t-sm tsec" style={{ margin: 0 }}>
+          Cuando el Token Guard oculte datos sensibles antes de enviarlos a la IA, los verás listados aquí.
+        </p>
       </div>
 
       <div className="card card-pad col gap2" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>

@@ -8,11 +8,20 @@ import { NX } from '../lib/data';
 import {
   api,
   BillingNotConfiguredError,
+  type MeResponse,
+  type UsageResponse,
   type NotificationView,
   type PlanView,
   type SubscriptionView,
 } from '../lib/api';
 import type { Nav } from './types';
+
+// Mapea una cuota real (UsageResponse) a props de QuotaRow.
+function drawerQuota(q: UsageResponse['quotas'][number]): { label: string; icon: string; used: number; total: number; unit: string } {
+  if (q.metric === 'voice_seconds') return { label: 'Voz', icon: 'mic', used: Math.round(q.used / 60), total: Math.round(q.limit / 60), unit: 'min' };
+  if (q.metric === 'vault_bytes') return { label: 'Vault', icon: 'book-open', used: Math.round(q.used / 1048576), total: Math.round(q.limit / 1048576), unit: 'MB' };
+  return { label: 'Mensajes IA', icon: 'message-circle', used: q.used, total: q.limit, unit: '' };
+}
 
 type Any = any;
 
@@ -279,26 +288,42 @@ function NotifsScreen({ nav }: { nav: Nav }) {
 function Drawer({ open, onClose, nav }: { open: boolean; onClose: () => void; nav: Nav }) {
   const [mounted, setMounted] = useState(open);
   const [show, setShow] = useState(false);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
   useEffect(() => {
     if (open) { setMounted(true); requestAnimationFrame(() => requestAnimationFrame(() => setShow(true))); }
     else { setShow(false); const t = setTimeout(() => setMounted(false), 320); return () => clearTimeout(t); }
   }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    if (!me) api.me().then(setMe).catch(() => {});
+    if (!usage) api.usage().then(setUsage).catch(() => {});
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!mounted) return null;
+  const name = me?.user.displayName ?? '';
+  const email = me?.user.email ?? '';
+  const planLabel = me?.tier ? me.tier.charAt(0).toUpperCase() + me.tier.slice(1) : '—';
+  async function logout() {
+    try { await api.logout(); } catch { /* noop */ }
+    window.location.href = '/';
+  }
   return (
     <>
       <div className={`sheet-backdrop${show ? ' show' : ''}`} onClick={onClose} />
       <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '82%', maxWidth: 320, zIndex: 90, background: 'var(--bg-surface)', borderRight: '1px solid var(--border-strong)', transform: show ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform .3s var(--ease)', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="col gap3" style={{ padding: '52px 20px 20px' }}>
-          <Avatar name={NX.user.name} size={56} />
+          <Avatar name={name} size={56} />
           <div className="col gap1">
-            <span className="t-lg fw7">{NX.user.name}</span>
-            <span className="t-xs tsec">{NX.user.email}</span>
+            <span className="t-lg fw7">{name}</span>
+            <span className="t-xs tsec">{email}</span>
           </div>
-          <Chip tone="accent" icon="sparkles" style={{ alignSelf: 'flex-start' }}>Plan {NX.user.plan}</Chip>
+          <Chip tone="accent" icon="sparkles" style={{ alignSelf: 'flex-start' }}>Plan {planLabel}</Chip>
         </div>
         <div className="card card-pad col gap3" style={{ margin: '0 16px 16px' }}>
-          <span className="t-xs tter fw6" style={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>Uso de mayo</span>
-          {NX.usage.slice(0, 2).map((u: Any) => <QuotaRow key={u.label} {...u} />)}
+          <span className="t-xs tter fw6" style={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>Uso del mes</span>
+          {usage
+            ? usage.quotas.slice(0, 2).map((q) => { const m = drawerQuota(q); return <QuotaRow key={m.label} {...m} />; })
+            : <span className="t-sm tsec">Cargando…</span>}
         </div>
         <div className="grow" style={{ overflowY: 'auto' }}>
           <ListRow icon="crown" title="Plan y facturación" onClick={() => { onClose(); setTimeout(() => nav.push('upgrade'), 60); }} />
@@ -306,7 +331,7 @@ function Drawer({ open, onClose, nav }: { open: boolean; onClose: () => void; na
           <ListRow icon="shield-check" title="Seguridad" onClick={() => { onClose(); setTimeout(() => nav.push('seguridad'), 60); }} />
           <ListRow icon="settings" title="Preferencias" onClick={() => { onClose(); setTimeout(() => nav.push('preferencias'), 60); }} />
         </div>
-        <button className="btn btn-ghost btn-md" style={{ color: 'var(--danger)', margin: 16, justifyContent: 'flex-start' }}>
+        <button className="btn btn-ghost btn-md" style={{ color: 'var(--danger)', margin: 16, justifyContent: 'flex-start' }} onClick={() => void logout()}>
           <Icon name="log-out" size={18} /> Cerrar sesión
         </button>
       </div>

@@ -194,11 +194,11 @@ function Skeleton({ w = '100%', h = 14, r = 8, style }: Any) {
 function StatePill({ state }: Any) {
   const map: Record<string, { c: string; t: string }> = {
     idle: { c: 'var(--text-tertiary)', t: 'Inactivo' },
-    Idle: { c: 'var(--text-tertiary)', t: 'Inactivo' },
-    Running: { c: 'var(--state-listening)', t: 'Ejecutando' },
-    Paused: { c: 'var(--warning)', t: 'Pausado' },
+    running: { c: 'var(--state-listening)', t: 'Ejecutando' },
+    paused: { c: 'var(--warning)', t: 'Pausado' },
+    error: { c: 'var(--danger)', t: 'Error' },
   };
-  const m = map[state] || map.idle;
+  const m = map[String(state ?? '').toLowerCase()] || map.idle;
   return (
     <span className="row gap2 t-xs fw6" style={{ color: m.c }}>
       <span style={{ width: 7, height: 7, borderRadius: 99, background: m.c, boxShadow: `0 0 8px ${m.c}` }} />

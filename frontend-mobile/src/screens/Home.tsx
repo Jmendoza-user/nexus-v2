@@ -21,6 +21,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
   const [state, setState] = useState('idle'); // idle | listening | thinking | speaking
   const [greeting, setGreeting] = useState<string>(NX.home.greeting);
   const [plan, setPlan] = useState<string>(NX.user.plan);
+  const [userName, setUserName] = useState<string>(NX.user.name);
   const [textMode, setTextMode] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -44,6 +45,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
       const h = new Date().getHours();
       const part = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
       setGreeting(`${part}, ${first}.`);
+      setUserName(me.user.displayName || NX.user.name);
       setPlan(me.tier ? me.tier.charAt(0).toUpperCase() + me.tier.slice(1) : NX.user.plan);
     }).catch(() => { /* mantiene el placeholder del diseño */ });
     return () => { alive = false; };
@@ -222,7 +224,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
       {/* top bar */}
       <div className="topbar">
         <button className="icon-btn" onClick={() => nav.openDrawer()} style={{ padding: 0 }}>
-          <Avatar name={NX.user.name} size={36} />
+          <Avatar name={userName} size={36} />
         </button>
         <Chip tone="accent" icon="sparkles">{plan}</Chip>
         <div className="row gap2">
@@ -235,7 +237,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
       <div className="grow col center" style={{ padding: '0 24px', gap: 6, textAlign: 'center' }}>
         <div className="anim-up" style={{ marginBottom: 4 }}>
           <h2 className="t-xl fw7" style={{ margin: 0, letterSpacing: '-0.01em' }}>{greeting}</h2>
-          <p className="t-sm tsec" style={{ margin: '6px 0 0', maxWidth: 280, textWrap: 'pretty' }}>{NX.home.summary}</p>
+          <p className="t-sm tsec" style={{ margin: '6px 0 0', maxWidth: 280, textWrap: 'pretty' }}>Pídeme por tu correo, agenda, finanzas o tus notas.</p>
         </div>
 
         <div style={{ position: 'relative', margin: '12px 0 4px' }}>
