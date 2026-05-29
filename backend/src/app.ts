@@ -8,12 +8,14 @@ import { authRouter } from './routes/auth.js';
 import { agentsRouter } from './routes/agents.js';
 import { assistantRouter } from './routes/assistant.js';
 import { voiceRouter } from './routes/voice.js';
+import { vaultRouter } from './routes/vault.js';
 import { PathTraversalError } from './services/userEnv.js';
 
 export function createApp() {
   const app = express();
 
-  app.use(express.json({ limit: '1mb' }));
+  // 2mb cubre notas de vault grandes (PUT/POST /api/vault/note).
+  app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
 
   app.get('/api/health', (_req: Request, res: Response) => {
@@ -24,6 +26,7 @@ export function createApp() {
   app.use('/api/agents', agentsRouter);
   app.use('/api/assistant', assistantRouter);
   app.use('/api/voice', voiceRouter);
+  app.use('/api/vault', vaultRouter);
 
   // 404 para rutas no encontradas bajo /api.
   app.use('/api', (_req: Request, res: Response) => {

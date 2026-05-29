@@ -34,6 +34,9 @@ export const env = {
   ELEVENLABS_VOICE_ID: process.env.ELEVENLABS_VOICE_ID ?? 'zssqi7M6uF2KLRnA0vAr',
   ELEVENLABS_MODEL_ID: process.env.ELEVENLABS_MODEL_ID ?? 'eleven_v3',
 
+  // ── Embeddings (BGE-m3 1024-dim, servicio local) ─────────────────────────
+  BGE_LOCAL_URL: process.env.BGE_LOCAL_URL ?? 'http://127.0.0.1:8100/embed',
+
   // Binario CLI (ClaudeCliAdapter — uso pesado en hitos siguientes).
   CLAUDE_CLI_BINARY: process.env.CLAUDE_CLI_BINARY ?? 'claude',
   get isProd() {

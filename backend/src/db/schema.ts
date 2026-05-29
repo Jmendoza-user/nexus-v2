@@ -13,6 +13,7 @@ import {
   pgTable,
   uuid,
   text,
+  integer,
   timestamp,
   bigint,
   boolean,
@@ -28,6 +29,26 @@ import { sql } from 'drizzle-orm';
 export const citext = customType<{ data: string }>({
   dataType() {
     return 'citext';
+  },
+});
+
+/**
+ * vector(1024): tipo pgvector para embeddings BGE-m3 (1024 dimensiones).
+ * Se serializa a/desde el formato textual de pgvector: '[0.1,0.2,...]'.
+ * Requiere la extensión `vector` habilitada en la DB.
+ */
+export const vector1024 = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return 'vector(1024)';
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value
+      .slice(1, -1)
+      .split(',')
+      .map((n) => Number(n));
   },
 });
 
@@ -235,6 +256,41 @@ export const issues = pgTable(
 );
 
 // ──────────────────────────────────────────────────────────────────────────
+// VAULT + RAG (segundo cerebro)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * vault_chunks — fragmentos indexados de las notas del vault de cada usuario,
+ * con su embedding BGE-m3 (1024-dim) para búsqueda semántica (RAG).
+ *
+ * Aislamiento estricto: toda query DEBE filtrar por user_id. note_path es la
+ * ruta RELATIVA de la nota dentro del vault del usuario (p.ej. 'projects/x.md').
+ * UNIQUE(user_id, note_path, chunk_idx) permite upsert idempotente por nota.
+ *
+ * El índice HNSW (vector_cosine_ops) y los índices auxiliares se crean en la
+ * migración SQL (drizzle no expresa HNSW de forma nativa todavía).
+ */
+export const vaultChunks = pgTable(
+  'vault_chunks',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    notePath: text('note_path').notNull(),
+    chunkIdx: integer('chunk_idx').notNull(),
+    content: text('content').notNull(),
+    embedding: vector1024('embedding').notNull(),
+    metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('vault_chunks_unique').on(t.userId, t.notePath, t.chunkIdx),
+    index('vault_chunks_user_idx').on(t.userId),
+  ]
+);
+
+// ──────────────────────────────────────────────────────────────────────────
 // Tipos inferidos
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -245,3 +301,4 @@ export type Project = typeof projects.$inferSelect;
 export type Issue = typeof issues.$inferSelect;
 export type UsageQuota = typeof usageQuotas.$inferSelect;
 export type TierPolicy = typeof tierPolicies.$inferSelect;
+export type VaultChunk = typeof vaultChunks.$inferSelect;

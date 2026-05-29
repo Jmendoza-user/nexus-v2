@@ -96,6 +96,52 @@ export interface TranscribeResponse {
   durationSeconds: number;
 }
 
+// ── Vault ──────────────────────────────────────────────────────────────────────
+export interface VaultTreeNode {
+  name: string;
+  path: string;
+  type: 'folder' | 'note';
+  size?: number;
+  mtime?: number;
+  children?: VaultTreeNode[];
+}
+
+export interface VaultTreeResponse {
+  tree: VaultTreeNode[];
+  totalNotes: number;
+}
+
+export interface VaultNote {
+  path: string;
+  title: string;
+  content: string;
+  body: string;
+  frontmatter: Record<string, unknown>;
+  links: string[];
+  backlinks: string[];
+  size: number;
+  mtime: number;
+}
+
+export interface VaultSearchResult {
+  path: string;
+  title: string;
+  excerpt: string;
+}
+
+export interface VaultRagCitation {
+  notePath: string;
+  title: string;
+  score: number;
+}
+
+export interface VaultRagResponse {
+  answer: string;
+  citations: VaultRagCitation[];
+  used: number;
+  model?: string;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const api = {
   login(email: string, password: string): Promise<AuthResult> {
@@ -144,6 +190,51 @@ export const api = {
     }
     if (!res.ok) throw makeError(res.status, data?.error || `HTTP ${res.status}`, data);
     return data as TranscribeResponse;
+  },
+
+  // ── Vault ──────────────────────────────────────────────────────────────────
+  vaultTree(): Promise<VaultTreeResponse> {
+    return jsonFetch<VaultTreeResponse>('/api/vault/tree');
+  },
+
+  vaultNote(notePath: string): Promise<VaultNote> {
+    return jsonFetch<VaultNote>(`/api/vault/note?path=${encodeURIComponent(notePath)}`);
+  },
+
+  vaultSaveNote(notePath: string, content: string): Promise<{ ok: boolean; path: string }> {
+    return jsonFetch('/api/vault/note', {
+      method: 'PUT',
+      body: JSON.stringify({ path: notePath, content }),
+    });
+  },
+
+  vaultCreateNote(
+    notePath: string,
+    opts?: { content?: string; template?: 'diaria' | 'concepto' | 'libre' }
+  ): Promise<{ ok: boolean; path: string; title: string }> {
+    return jsonFetch('/api/vault/note', {
+      method: 'POST',
+      body: JSON.stringify({ path: notePath, ...(opts ?? {}) }),
+    });
+  },
+
+  vaultDeleteNote(notePath: string): Promise<{ ok: boolean; path: string }> {
+    return jsonFetch(`/api/vault/note?path=${encodeURIComponent(notePath)}`, { method: 'DELETE' });
+  },
+
+  vaultSearch(query: string): Promise<{ query: string; results: VaultSearchResult[] }> {
+    return jsonFetch('/api/vault/search', { method: 'POST', body: JSON.stringify({ query }) });
+  },
+
+  vaultRag(query: string, k?: number): Promise<VaultRagResponse> {
+    return jsonFetch<VaultRagResponse>('/api/vault/rag/query', {
+      method: 'POST',
+      body: JSON.stringify({ query, ...(k ? { k } : {}) }),
+    });
+  },
+
+  vaultReindex(): Promise<{ ok: boolean; notes: number; chunks: number; skipped: number; errors: number }> {
+    return jsonFetch('/api/vault/reindex', { method: 'POST' });
   },
 
   /** Sintetiza voz y devuelve un Blob audio/mpeg listo para reproducir. */
