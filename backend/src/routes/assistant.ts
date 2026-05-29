@@ -36,6 +36,8 @@ import { runGoogleTool, isGoogleTool } from '../services/google/tools.js';
 import { isNexusTool, runNexusTool, nexusToolsBlock } from '../services/tools/nexus.js';
 import { getUserMemory, userMemoryBlock } from '../services/memory.js';
 import { appendMessage, recentHistory, listMessages, clearConversation } from '../services/conversation.js';
+import { isSkillOnDisk } from '../services/skills.js';
+import { WEB_TOOL, runWebSearch, webToolsBlock } from '../services/tools/web.js';
 
 export const assistantRouter = Router();
 
@@ -99,11 +101,14 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
   if (!systemPrompt) systemPrompt = DEFAULT_SYSTEM;
 
   // Conciencia de conexión Google (Gmail/Calendar/Drive) + protocolo de tools.
-  const [googleConnected, memory] = await Promise.all([
+  const [googleConnected, memory, webEnabled] = await Promise.all([
     isGoogleConnected(tenant.userId).catch(() => false),
     getUserMemory(tenant.userId).catch(() => []),
+    isSkillOnDisk(tenant.userId, 'buscador-web').catch(() => false),
   ]);
-  systemPrompt = `${systemPrompt}\n${googleSystemBlock(googleConnected)}\n${nexusToolsBlock()}\n${userMemoryBlock(memory)}`;
+  systemPrompt =
+    `${systemPrompt}\n${googleSystemBlock(googleConnected)}\n${nexusToolsBlock()}\n${userMemoryBlock(memory)}` +
+    (webEnabled ? `\n${webToolsBlock()}` : '');
 
   try {
     // 2. Adapter/modelo según tier (downgrade si el agente pide algo no permitido).
@@ -163,24 +168,27 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
       promptTokens += result.usage.promptTokens ?? 0;
       completionTokens += result.usage.completionTokens ?? 0;
 
-      const isKnown = (t: string) => (googleConnected && isGoogleTool(t)) || isNexusTool(t);
+      const isKnown = (t: string) =>
+        (googleConnected && isGoogleTool(t)) || isNexusTool(t) || (webEnabled && t === WEB_TOOL);
       const action = parseAction(result.text, isKnown);
       if (!action) {
         finalText = result.text;
         break;
       }
-      // El modelo pidió una herramienta (interna de NEXUS o de Google): ejecutar.
+      // El modelo pidió una herramienta (interna de NEXUS, Google o búsqueda web).
       usedTool = true;
       messages.push({ role: 'assistant', content: result.text });
       let obs: string;
       try {
-        const tr = isNexusTool(action.tool)
-          ? await runNexusTool(
-              { userId: tenant.userId, orgId: tenant.orgId, tier: tenant.tier, scoped: tenant.scoped },
-              action.tool,
-              action.args
-            )
-          : await runGoogleTool(tenant.userId, action.tool, action.args);
+        const tr = action.tool === WEB_TOOL
+          ? await runWebSearch(action.args)
+          : isNexusTool(action.tool)
+            ? await runNexusTool(
+                { userId: tenant.userId, orgId: tenant.orgId, tier: tenant.tier, scoped: tenant.scoped },
+                action.tool,
+                action.args
+              )
+            : await runGoogleTool(tenant.userId, action.tool, action.args);
         obs = JSON.stringify(tr);
       } catch (e) {
         obs = JSON.stringify({ ok: false, error: (e as Error).message });
