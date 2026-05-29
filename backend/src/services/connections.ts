@@ -20,8 +20,24 @@ import { encrypt, decrypt } from '../lib/crypto.js';
 import { resolveUserPaths, provisionUserEnv, assertWithinUserEnv } from './userEnv.js';
 import { env } from '../lib/env.js';
 
-export const PROVIDERS = ['gmail', 'gcal', 'meta', 'telegram', 'mercadopago'] as const;
+export const PROVIDERS = ['google', 'gmail', 'gcal', 'meta', 'telegram', 'mercadopago'] as const;
 export type Provider = (typeof PROVIDERS)[number];
+
+/**
+ * Scopes solicitados por la conexión unificada `google` (un solo consent →
+ * Gmail + Calendar + Drive). Amplios para "control total": la IA puede leer y
+ * crear libremente; las acciones DESTRUCTIVAS (enviar, borrar) se gatean en la
+ * capa de aplicación con aprobación humana (no por scope).
+ */
+export const GOOGLE_SCOPES = [
+  'openid',
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/gmail.modify', // leer, etiquetar, papelera
+  'https://www.googleapis.com/auth/gmail.send', // enviar (gateado por aprobación)
+  'https://www.googleapis.com/auth/calendar', // agenda r/w
+  'https://www.googleapis.com/auth/drive', // archivos r/w
+];
 
 export type ConnectionStatus = 'active' | 'disconnected' | 'expired' | 'pending';
 
@@ -40,7 +56,7 @@ export function isProvider(p: string): p is Provider {
 }
 
 /** Providers cuyo OAuth depende de credenciales de app de Google. */
-const GOOGLE_PROVIDERS: Provider[] = ['gmail', 'gcal'];
+const GOOGLE_PROVIDERS: Provider[] = ['google', 'gmail', 'gcal'];
 
 /** ¿Hay credenciales de Google app configuradas para el OAuth real? */
 export function googleOAuthConfigured(): boolean {
@@ -213,21 +229,30 @@ export function buildGoogleAuthUrl(provider: Provider, state: string): string {
     );
   }
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID!;
-  const redirectUri =
-    process.env.GOOGLE_OAUTH_REDIRECT_URI ??
-    `${process.env.PUBLIC_BASE_URL ?? `http://localhost:${env.PORT}`}/api/connections/${provider}/oauth/callback`;
+  const redirectUri = googleRedirectUri(provider);
   const scopes =
-    provider === 'gmail'
-      ? ['https://www.googleapis.com/auth/gmail.readonly']
-      : ['https://www.googleapis.com/auth/calendar'];
+    provider === 'google'
+      ? GOOGLE_SCOPES
+      : provider === 'gmail'
+        ? ['https://www.googleapis.com/auth/gmail.readonly']
+        : ['https://www.googleapis.com/auth/calendar'];
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    access_type: 'offline',
-    prompt: 'consent',
+    access_type: 'offline', // pide refresh_token
+    prompt: 'consent', // fuerza refresh_token aunque ya haya consentido antes
+    include_granted_scopes: 'true',
     state,
     scope: scopes.join(' '),
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+/** Redirect URI canónico para el provider (debe coincidir EXACTO en Google Cloud). */
+export function googleRedirectUri(provider: Provider): string {
+  return (
+    process.env.GOOGLE_OAUTH_REDIRECT_URI ??
+    `${process.env.PUBLIC_BASE_URL ?? `http://localhost:${env.PORT}`}/api/connections/${provider}/oauth/callback`
+  );
 }

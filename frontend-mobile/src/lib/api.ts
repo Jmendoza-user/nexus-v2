@@ -143,7 +143,7 @@ export interface SkillInstallation {
 }
 
 // ── Conexiones ────────────────────────────────────────────────────────────────
-export type ConnectionProvider = 'gmail' | 'gcal' | 'meta' | 'telegram' | 'mercadopago';
+export type ConnectionProvider = 'google' | 'gmail' | 'gcal' | 'meta' | 'telegram' | 'mercadopago';
 export interface ConnectionView {
   provider: ConnectionProvider;
   status: 'active' | 'disconnected' | 'expired' | 'pending';

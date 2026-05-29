@@ -21,9 +21,12 @@ import {
   buildGoogleAuthUrl,
   isProvider,
   googleOAuthConfigured,
+  saveSecret,
   ConnectionError,
   type Provider,
 } from '../services/connections.js';
+import { exchangeCode, fetchGoogleEmail, baseClient } from '../services/google/client.js';
+import { env } from '../lib/env.js';
 
 export const connectionsRouter = Router();
 connectionsRouter.use(authJwt, tenantContext);
@@ -98,20 +101,46 @@ connectionsRouter.get('/:provider/oauth/callback', async (req: Request, res: Res
   const provider = requireProvider(req, res);
   if (!provider) return;
 
+  const appUrl = process.env.PUBLIC_BASE_URL ?? `http://localhost:${env.PORT}`;
+  const back = (status: string) => res.redirect(`${appUrl}/?google=${status}`);
+
   if (!googleOAuthConfigured()) {
-    res.status(503).json({
-      error: 'La conexión con Google aún no está configurada en este servidor.',
-      code: 'not_configured',
-    });
-    return;
+    return back('not_configured');
   }
-  // TODO-DEUDA(oauth-google-real): canjear `code` por tokens contra Google,
-  // validar `state`, y llamar a saveSecret(userId, provider, tokens). Hoy el
-  // intercambio queda detrás del SEAM por falta de credenciales de app.
-  res.status(501).json({
-    error: 'Intercambio de tokens OAuth pendiente de implementación.',
-    code: 'not_implemented',
-  });
+
+  // El usuario canceló el consentimiento.
+  const oauthErr = typeof req.query.error === 'string' ? req.query.error : null;
+  if (oauthErr) return back('denied');
+
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
+  if (!code || !stateRaw) return back('error');
+
+  // Validar state (CSRF): el userId firmado debe coincidir con la sesión.
+  let stateUser = '';
+  try {
+    const parsed = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8')) as { u?: string };
+    stateUser = parsed.u ?? '';
+  } catch {
+    return back('error');
+  }
+  if (!stateUser || stateUser !== req.tenant!.userId) {
+    return back('error');
+  }
+
+  try {
+    const tokens = await exchangeCode(code);
+    // Email de la cuenta autorizada (para mostrar la conexión).
+    const client = baseClient();
+    client.setCredentials(tokens);
+    const email = await fetchGoogleEmail(client);
+    // Guarda como conexión unificada `google` (Gmail + Calendar + Drive).
+    await saveSecret(req.tenant!.userId, 'google', { ...tokens, email }, { email });
+    return back('connected');
+  } catch (err) {
+    console.error('[connections] google oauth callback error:', (err as Error).message);
+    return back('error');
+  }
 });
 
 // DELETE /api/connections/:provider

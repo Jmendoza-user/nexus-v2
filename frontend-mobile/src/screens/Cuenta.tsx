@@ -297,6 +297,7 @@ function SkillCard({ entry, install, state, onAction }: { entry: SkillCatalogEnt
 
 // ---- Conexiones ----
 const PROVIDER_META: Record<ConnectionProvider, { name: string; icon: string; detail: string }> = {
+  google: { name: 'Google', icon: 'globe', detail: 'Gmail, Calendar y Drive' },
   gmail: { name: 'Gmail', icon: 'mail', detail: 'Lectura de movimientos' },
   gcal: { name: 'Google Calendar', icon: 'calendar', detail: 'Eventos y agenda' },
   meta: { name: 'Meta / Instagram', icon: 'camera', detail: 'Publicaciones' },
@@ -316,8 +317,9 @@ function ConfigConexiones({ nav }: { nav: Nav }) {
 
   async function refresh() {
     const res = await api.connections();
-    // No mostramos telegram aquí: tiene su propia tarjeta de vinculación abajo.
-    setConns(res.connections.filter((c) => c.provider !== 'telegram'));
+    // Telegram tiene su propia tarjeta abajo. gmail/gcal quedan unificados en la
+    // conexión 'google' (un solo login → Gmail + Calendar + Drive), no se listan sueltos.
+    setConns(res.connections.filter((c) => !['telegram', 'gmail', 'gcal'].includes(c.provider)));
   }
   useEffect(() => { void refresh(); }, []);
 

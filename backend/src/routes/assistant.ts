@@ -30,6 +30,9 @@ import { redact, restore } from '../services/tokenGuard.js';
 import { AdapterError, type ChatMessage } from '../services/ai/types.js';
 import { cacheKey, getCached, setCached } from '../services/promptCache.js';
 import { logUsage } from '../services/usageLog.js';
+import { isGoogleConnected } from '../services/google/client.js';
+import { googleSystemBlock, parseAction } from '../services/google/promptProtocol.js';
+import { runGoogleTool } from '../services/google/tools.js';
 
 export const assistantRouter = Router();
 
@@ -92,6 +95,10 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
   }
   if (!systemPrompt) systemPrompt = DEFAULT_SYSTEM;
 
+  // Conciencia de conexión Google (Gmail/Calendar/Drive) + protocolo de tools.
+  const googleConnected = await isGoogleConnected(tenant.userId).catch(() => false);
+  systemPrompt = `${systemPrompt}\n${googleSystemBlock(googleConnected)}`;
+
   try {
     // 2. Adapter/modelo según tier (downgrade si el agente pide algo no permitido).
     const cliContext = tenant.userPaths
@@ -117,7 +124,7 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
     //    gastar el modelo. La clave usa texto YA redactado (no se cachea PII).
     //    Sólo cacheamos turnos sin historial (one-shot): con historial la
     //    respuesta depende del contexto y el hit exacto sería poco fiable.
-    const cacheable = !history || history.length === 0;
+    const cacheable = (!history || history.length === 0) && !googleConnected;
     const ns = `chat|${picked.model}|${systemPrompt.slice(0, 64)}`;
     const key = cacheKey(ns, redacted);
 
@@ -140,26 +147,57 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
       }
     }
 
-    // 5. Llamada al modelo.
-    const result = await picked.adapter.chat(messages, { model: picked.model });
+    // 5. Loop acción→observación (protocolo de tools por prompt). Si Google no
+    //    está conectado, el modelo no emite acciones → una sola pasada.
+    const MAX_STEPS = 5;
+    let finalText = '';
+    let usedTool = false;
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    for (let i = 0; i < MAX_STEPS; i++) {
+      const result = await picked.adapter.chat(messages, { model: picked.model });
+      promptTokens += result.usage.promptTokens ?? 0;
+      completionTokens += result.usage.completionTokens ?? 0;
+
+      const action = googleConnected ? parseAction(result.text) : null;
+      if (!action) {
+        finalText = result.text;
+        break;
+      }
+      // El modelo pidió una herramienta de Google: ejecutar y devolver observación.
+      usedTool = true;
+      messages.push({ role: 'assistant', content: result.text });
+      let obs: string;
+      try {
+        const tr = await runGoogleTool(tenant.userId, action.tool, action.args);
+        obs = JSON.stringify(tr);
+      } catch (e) {
+        obs = JSON.stringify({ ok: false, error: (e as Error).message });
+      }
+      if (obs.length > 6000) obs = `${obs.slice(0, 6000)}…(truncado)`;
+      messages.push({ role: 'user', content: `OBSERVACIÓN (${action.tool}): ${obs}` });
+    }
+    if (!finalText) {
+      finalText = 'No pude completar la acción tras varios pasos. ¿Me lo dices de otra forma?';
+    }
 
     // 6. Restaurar PII en la respuesta (el modelo pudo repetir placeholders).
-    const reply = restore(result.text, map);
+    const reply = restore(finalText, map);
 
-    // 7. Registrar uso (1 mensaje) + telemetría de tokens.
+    // 7. Registrar uso (1 mensaje) + telemetría de tokens agregados del loop.
     await recordUsage(tenant.orgId, tenant.tier, 'messages', 1);
     void logUsage({
       userId: tenant.userId,
       orgId: tenant.orgId,
       kind: 'chat',
-      model: result.model,
-      tokensPrompt: result.usage.promptTokens,
-      tokensCompletion: result.usage.completionTokens,
+      model: picked.model,
+      tokensPrompt: promptTokens,
+      tokensCompletion: completionTokens,
       cacheHit: false,
     });
-    // Guarda en caché la respuesta CON placeholders (sin PII); el restore se
-    // aplica por petición con su propio map.
-    if (cacheable) void setCached(key, result.text);
+    // Cachea sólo el camino simple (sin tools): respuesta con placeholders.
+    if (cacheable && !usedTool) void setCached(key, finalText);
 
     res.json({
       reply,
@@ -167,8 +205,9 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
       model: picked.model,
       adapter: picked.adapterName,
       downgraded: picked.downgraded,
-      usage: result.usage,
+      usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens },
       cached: false,
+      usedTool,
     });
   } catch (err) {
     if (err instanceof AdapterError) {
