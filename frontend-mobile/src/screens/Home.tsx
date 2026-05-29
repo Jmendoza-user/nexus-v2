@@ -8,22 +8,26 @@ import { Avatar, Chip, IconBtn } from '../ui';
 import { Icon } from '../lib/icons';
 import { NX } from '../lib/data';
 import { AuraVisualizer } from '../components/AuraVisualizer';
-import { api, QuotaError, type ChatTurn } from '../lib/api';
+import { api, QuotaError } from '../lib/api';
+import { addTurn, apiHistory } from '../lib/conversation';
 import type { Nav } from './types';
+
+// WAV silencioso mínimo para "desbloquear" el elemento <audio> dentro de un
+// gesto del usuario (móvil bloquea play() programático fuera de gesto).
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
   const [state, setState] = useState('idle'); // idle | listening | thinking | speaking
-  const [transcript, setTranscript] = useState<string | null>(null);
-  const [response, setResponse] = useState<string | null>(null);
   const [greeting, setGreeting] = useState<string>(NX.home.greeting);
   const [plan, setPlan] = useState<string>(NX.user.plan);
   const [textMode, setTextMode] = useState(false);
   const [draft, setDraft] = useState('');
 
-  const history = useRef<ChatTurn[]>([]);
   const mediaRec = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const audioEl = useRef<HTMLAudioElement | null>(null);
+  const audioPrimed = useRef(false);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPress = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -47,8 +51,42 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
 
   useEffect(() => () => { stopRecording(); stopAudio(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Elemento <audio> único y persistente (no recrear: una vez desbloqueado por
+  // un gesto, sigue habilitado para play() programático).
+  function ensureAudio(): HTMLAudioElement {
+    if (!audioEl.current) {
+      const el = new Audio();
+      el.preload = 'auto';
+      audioEl.current = el;
+    }
+    return audioEl.current;
+  }
+
+  // Desbloqueo de audio: se llama DENTRO del gesto (tap). Reproduce un silencio
+  // muteado; tras eso el navegador permite play() programático más tarde.
+  function primeAudio() {
+    if (audioPrimed.current) return;
+    try {
+      const el = ensureAudio();
+      el.muted = true;
+      el.src = SILENT_WAV;
+      const p = el.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          try { el.pause(); el.currentTime = 0; } catch { /* noop */ }
+          el.muted = false;
+          audioPrimed.current = true;
+        }).catch(() => { el.muted = false; });
+      } else {
+        el.muted = false;
+        audioPrimed.current = true;
+      }
+    } catch { /* noop */ }
+  }
+
   function stopAudio() {
-    if (audioEl.current) { try { audioEl.current.pause(); } catch { /* noop */ } audioEl.current = null; }
+    const el = audioEl.current;
+    if (el) { try { el.pause(); } catch { /* noop */ } }
   }
   function stopRecording() {
     const rec = mediaRec.current;
@@ -68,31 +106,51 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
     return false;
   }
 
-  // ── Envío de texto al asistente ────────────────────────────────────────────
-  const sendText = useCallback(async (msg: string) => {
-    const text = msg.trim();
+  // ── Reproducción de la respuesta con voz (Elisa) ────────────────────────────
+  // El elemento ya quedó desbloqueado por el gesto del tap (primeAudio).
+  async function speak(text: string) {
+    setState('speaking');
+    try {
+      const blob = await api.synthesize(text);
+      const url = URL.createObjectURL(blob);
+      const el = ensureAudio();
+      el.muted = false;
+      el.src = url;
+      el.onended = () => { setState('idle'); URL.revokeObjectURL(url); };
+      el.onerror = () => { setState('idle'); URL.revokeObjectURL(url); };
+      await el.play();
+    } catch (e) {
+      console.warn('[voice] playback falló:', (e as Error)?.message);
+      nav.toast('No pude reproducir la voz', 'volume-2', 'warning');
+      setState('idle');
+    }
+  }
+
+  // ── Pregunta unificada (voz / texto / sugerencia) ───────────────────────────
+  // El Home NO muestra texto: el turno se guarda en el store (visible en Chat)
+  // y la respuesta SE HABLA. Así el texto nunca se adelanta a la voz.
+  const ask = useCallback(async (userText: string, speakReply = true) => {
+    const text = userText.trim();
     if (!text) return;
     stopAudio();
-    setResponse(null);
-    setTranscript(text);
+    const prior = apiHistory(12);
+    addTurn('user', text);
     setState('thinking');
     try {
-      const res = await api.chat(text, { history: history.current.slice(-12) });
-      history.current.push({ role: 'user', content: text }, { role: 'assistant', content: res.reply });
-      setResponse(res.reply);
-      setState('idle');
+      const res = await api.chat(text, { history: prior });
+      addTurn('assistant', res.reply);
+      if (speakReply) await speak(res.reply);
+      else setState('idle');
     } catch (err) {
       if (handleQuota(err)) return;
       nav.toast('No pude responder ahora mismo', 'alert-triangle', 'danger');
       setState('idle');
     }
-  }, [nav]);
+  }, [nav]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Flujo de voz: grabar → transcribir → chat → sintetizar → reproducir ─────
   async function startVoice() {
     stopAudio();
-    setResponse(null);
-    setTranscript(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunks.current = [];
@@ -117,23 +175,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
     try {
       const tr = await api.transcribe(blob, 'es');
       if (!tr.text) { setState('idle'); return; }
-      setTranscript(tr.text);
-      const res = await api.chat(tr.text, { history: history.current.slice(-12) });
-      history.current.push({ role: 'user', content: tr.text }, { role: 'assistant', content: res.reply });
-      setResponse(res.reply);
-      // TTS y reproducción.
-      setState('speaking');
-      try {
-        const audioBlob = await api.synthesize(res.reply);
-        const url = URL.createObjectURL(audioBlob);
-        const el = new Audio(url);
-        audioEl.current = el;
-        el.onended = () => { setState('idle'); URL.revokeObjectURL(url); };
-        el.onerror = () => { setState('idle'); URL.revokeObjectURL(url); };
-        await el.play();
-      } catch {
-        setState('idle'); // si falla TTS, igual mostramos el texto
-      }
+      await ask(tr.text, true); // guarda turnos en el store y habla la respuesta
     } catch (err) {
       if (handleQuota(err)) return;
       nav.toast('No pude procesar tu voz', 'alert-triangle', 'danger');
@@ -143,6 +185,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
 
   // ── Interacción del FAB mic ─────────────────────────────────────────────────
   function micPointerDown() {
+    primeAudio(); // desbloquea el audio dentro del gesto (clave en móvil)
     didLongPress.current = false;
     longPress.current = setTimeout(() => {
       didLongPress.current = true;
@@ -171,7 +214,7 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
     if (!v) return;
     setDraft('');
     setTextMode(false);
-    void sendText(v);
+    void ask(v);
   }
 
   return (
@@ -182,7 +225,10 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
           <Avatar name={NX.user.name} size={36} />
         </button>
         <Chip tone="accent" icon="sparkles">{plan}</Chip>
-        <IconBtn name="bell" badge onClick={() => nav.push('notifs')} />
+        <div className="row gap2">
+          <IconBtn name="message-circle" onClick={() => nav.push('chat')} />
+          <IconBtn name="bell" badge onClick={() => nav.push('notifs')} />
+        </div>
       </div>
 
       {/* center */}
@@ -200,28 +246,15 @@ function HomeScreen({ nav, accent }: { nav: Nav; accent: string }) {
           {state !== 'idle' && <span style={{ width: 7, height: 7, borderRadius: 99, background: STATE_COLOR[state], boxShadow: `0 0 10px ${STATE_COLOR[state]}` }} />}
           {STATE_LABEL[state]}
         </div>
-
-        {/* transcript */}
-        <div style={{ minHeight: 84, width: '100%', maxWidth: 320 }}>
-          {transcript && (
-            <div className="anim-up" style={{ marginTop: 8 }}>
-              <div className="t-xs tter fw6" style={{ textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Tú</div>
-              <p className="t-base" style={{ margin: 0, color: 'var(--text-primary)' }}>“{transcript}”</p>
-            </div>
-          )}
-          {response && (
-            <div className="anim-up" style={{ marginTop: 14, padding: '12px 14px', background: 'var(--accent-soft)', borderRadius: 'var(--r-lg)', border: '1px solid var(--accent-soft-2)' }}>
-              <p className="t-sm" style={{ margin: 0, textWrap: 'pretty' }}>{response}</p>
-            </div>
-          )}
-        </div>
+        {/* Sin texto en el Home (experiencia tipo Alexa): la respuesta se habla.
+            El historial de entrada/salida se ve en el Chat (botón arriba). */}
       </div>
 
       {/* suggestions */}
-      {state === 'idle' && !response && !textMode && (
+      {state === 'idle' && !textMode && (
         <div className="row gap2 wrap center anim-up" style={{ padding: '0 20px 14px' }}>
           {NX.home.suggestions.map((s: string) => (
-            <button key={s} className="chip" style={{ cursor: 'pointer', height: 34 }} onClick={() => void sendText(s)}>{s}</button>
+            <button key={s} className="chip" style={{ cursor: 'pointer', height: 34 }} onClick={() => void ask(s)}>{s}</button>
           ))}
         </div>
       )}

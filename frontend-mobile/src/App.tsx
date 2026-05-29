@@ -4,7 +4,7 @@
 // Sin marco de celular ni panel de tweaks: la interfaz real
 // llena el viewport (full-bleed en móvil, columna en escritorio).
 // ============================================================
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { Icon } from './lib/icons';
 import { Toast } from './ui';
@@ -21,6 +21,7 @@ import {
   ConfigSeguridad, ConfigPreferencias, UsoScreen,
 } from './screens/Cuenta';
 import { UpgradeScreen, NotifsScreen, Drawer } from './screens/Misc';
+import { ChatScreen } from './screens/Chat';
 import { LoginScreen, Onboarding } from './screens/Onboarding';
 
 type Any = any;
@@ -66,6 +67,7 @@ function renderPushed(route: Any, _data: Any, nav: Nav, theme: string, setTheme:
     case 'agent': return <AgentDetail nav={nav} data={route.data} />;
     case 'agentes': return <AgentesScreen nav={nav} />;
     case 'notifs': return <NotifsScreen nav={nav} />;
+    case 'chat': return <ChatScreen nav={nav} />;
     case 'upgrade': return <UpgradeScreen nav={nav} />;
     case 'principal': return <ConfigPrincipal nav={nav} />;
     case 'skills': return <ConfigSkills nav={nav} />;
@@ -98,6 +100,21 @@ function App() {
     closeDrawer: () => setDrawer(false),
     toast: (msg, icon, tone) => { const id = Date.now() + Math.random(); setToasts(x => [...x, { id, msg, icon, tone }]); },
   }), []);
+
+  // Feedback al volver del OAuth de Google (?google=connected|denied|error).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('google');
+    if (!p) return;
+    const map: Record<string, [string, string, string]> = {
+      connected: ['Google conectado', 'check-circle', 'success'],
+      denied: ['Cancelaste la conexión con Google', 'x-circle', 'warning'],
+      error: ['No se pudo conectar Google', 'alert-triangle', 'danger'],
+      not_configured: ['Google aún no está configurado', 'alert-triangle', 'warning'],
+    };
+    const m = map[p];
+    if (m) nav.toast(m[0], m[1], m[2]);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [nav]);
 
   function renderTab() {
     switch (tab) {

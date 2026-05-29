@@ -116,7 +116,8 @@ voiceRouter.post('/synthesize', async (req: Request, res: Response) => {
   }
 
   try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    // optimize_streaming_latency=3 reduce el time-to-first-byte del TTS.
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=3`, {
       method: 'POST',
       headers: {
         'xi-api-key': env.ELEVENLABS_API_KEY,
