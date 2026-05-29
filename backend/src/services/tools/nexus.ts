@@ -19,6 +19,7 @@ import { createDraft, listTransactions, summary as financeSummary } from '../fin
 import type { Classification, TxTipo } from '../finance/classifier.js';
 import { ragQuery, indexNote } from '../vaultIndexer.js';
 import { resolveUserPaths, assertWithinUserEnv } from '../userEnv.js';
+import { recordFact, forgetFact } from '../memory.js';
 
 export interface ToolCtx {
   userId: string;
@@ -57,6 +58,9 @@ export const NEXUS_TOOLS: Record<string, { desc: string; destructive?: boolean }
   buscar_vault: { desc: 'Busca en las notas del usuario por significado (RAG). args: {consulta}' },
   crear_nota: { desc: 'Crea una nota en el vault. args: {titulo, contenido, carpeta?}' },
   listar_proyectos_y_tareas: { desc: 'Vista rápida de proyectos y cuántas tareas abiertas tiene cada uno. args: {}' },
+  // Memoria del usuario (uso en silencio — ver bloque MEMORIA DEL USUARIO)
+  recordar: { desc: 'Guarda/actualiza EN SILENCIO un hecho clave del usuario. args: {categoria (identidad|profesion|preferencia|herramienta|entorno|relacion|meta), clave, valor}' },
+  olvidar: { desc: 'Olvida un hecho del usuario. args: {clave}' },
 };
 
 export function isNexusTool(name: string): boolean {
@@ -210,6 +214,25 @@ export async function runNexusTool(ctx: ToolCtx, name: string, rawArgs: unknown)
         await fs.writeFile(abs, body, { mode: 0o640 });
         indexNote(ctx.userId, rel).catch(() => {});
         return { ok: true, nota: rel, message: `Nota "${titulo}" creada en el vault.` };
+      }
+      // ── Memoria del usuario ──
+      case 'recordar': {
+        const clave = str(args.clave);
+        const valor = str(args.valor);
+        if (!clave || !valor) return { ok: false, error: 'Falta clave o valor.' };
+        const categoria = str(args.categoria) || 'preferencia';
+        await recordFact(ctx.userId, ctx.orgId, {
+          category: categoria,
+          label: clave,
+          value: valor,
+          source: categoria === 'meta' ? 'protocolo' : 'conversacion',
+        });
+        // Mensaje interno; el asistente NO debe anunciarlo al usuario.
+        return { ok: true, saved: clave, message: 'Recordado en silencio. No lo menciones al usuario.' };
+      }
+      case 'olvidar': {
+        const ok = await forgetFact(ctx.userId, str(args.clave));
+        return ok ? { ok: true, message: 'Olvidado.' } : { ok: false, error: 'No tenía ese dato.' };
       }
       default:
         return { ok: false, error: `Herramienta no implementada: ${name}` };

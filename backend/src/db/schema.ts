@@ -747,3 +747,33 @@ export type TransactionEmailEvidence = typeof transactionEmailEvidence.$inferSel
 export type AiUsageLog = typeof aiUsageLog.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type Monitor = typeof monitors.$inferSelect;
+
+// ──────────────────────────────────────────────────────────────────────────
+// MEMORIA DEL USUARIO — hechos que la IA aprende y usa de forma implícita.
+// category: identidad | profesion | preferencia | herramienta | entorno | relacion | meta
+// source: protocolo (entrevista) | conversacion (captura pasiva) | manual
+// ──────────────────────────────────────────────────────────────────────────
+export const userMemory = pgTable(
+  'user_memory',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    category: text('category').notNull(),
+    label: text('label').notNull(),
+    value: text('value').notNull(),
+    confidence: integer('confidence').notNull().default(80),
+    source: text('source').notNull().default('conversacion'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('user_memory_unique').on(t.userId, t.category, t.label),
+    index('user_memory_user_idx').on(t.userId),
+  ]
+);
+export type UserMemory = typeof userMemory.$inferSelect;

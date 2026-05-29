@@ -34,6 +34,7 @@ import { isGoogleConnected } from '../services/google/client.js';
 import { googleSystemBlock, parseAction } from '../services/google/promptProtocol.js';
 import { runGoogleTool, isGoogleTool } from '../services/google/tools.js';
 import { isNexusTool, runNexusTool, nexusToolsBlock } from '../services/tools/nexus.js';
+import { getUserMemory, userMemoryBlock } from '../services/memory.js';
 
 export const assistantRouter = Router();
 
@@ -97,8 +98,11 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
   if (!systemPrompt) systemPrompt = DEFAULT_SYSTEM;
 
   // Conciencia de conexión Google (Gmail/Calendar/Drive) + protocolo de tools.
-  const googleConnected = await isGoogleConnected(tenant.userId).catch(() => false);
-  systemPrompt = `${systemPrompt}\n${googleSystemBlock(googleConnected)}\n${nexusToolsBlock()}`;
+  const [googleConnected, memory] = await Promise.all([
+    isGoogleConnected(tenant.userId).catch(() => false),
+    getUserMemory(tenant.userId).catch(() => []),
+  ]);
+  systemPrompt = `${systemPrompt}\n${googleSystemBlock(googleConnected)}\n${nexusToolsBlock()}\n${userMemoryBlock(memory)}`;
 
   try {
     // 2. Adapter/modelo según tier (downgrade si el agente pide algo no permitido).
