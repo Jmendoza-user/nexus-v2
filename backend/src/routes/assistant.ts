@@ -32,7 +32,8 @@ import { cacheKey, getCached, setCached } from '../services/promptCache.js';
 import { logUsage } from '../services/usageLog.js';
 import { isGoogleConnected } from '../services/google/client.js';
 import { googleSystemBlock, parseAction } from '../services/google/promptProtocol.js';
-import { runGoogleTool } from '../services/google/tools.js';
+import { runGoogleTool, isGoogleTool } from '../services/google/tools.js';
+import { isNexusTool, runNexusTool, nexusToolsBlock } from '../services/tools/nexus.js';
 
 export const assistantRouter = Router();
 
@@ -97,7 +98,7 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
 
   // Conciencia de conexión Google (Gmail/Calendar/Drive) + protocolo de tools.
   const googleConnected = await isGoogleConnected(tenant.userId).catch(() => false);
-  systemPrompt = `${systemPrompt}\n${googleSystemBlock(googleConnected)}`;
+  systemPrompt = `${systemPrompt}\n${googleSystemBlock(googleConnected)}\n${nexusToolsBlock()}`;
 
   try {
     // 2. Adapter/modelo según tier (downgrade si el agente pide algo no permitido).
@@ -160,17 +161,24 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
       promptTokens += result.usage.promptTokens ?? 0;
       completionTokens += result.usage.completionTokens ?? 0;
 
-      const action = googleConnected ? parseAction(result.text) : null;
+      const isKnown = (t: string) => (googleConnected && isGoogleTool(t)) || isNexusTool(t);
+      const action = parseAction(result.text, isKnown);
       if (!action) {
         finalText = result.text;
         break;
       }
-      // El modelo pidió una herramienta de Google: ejecutar y devolver observación.
+      // El modelo pidió una herramienta (interna de NEXUS o de Google): ejecutar.
       usedTool = true;
       messages.push({ role: 'assistant', content: result.text });
       let obs: string;
       try {
-        const tr = await runGoogleTool(tenant.userId, action.tool, action.args);
+        const tr = isNexusTool(action.tool)
+          ? await runNexusTool(
+              { userId: tenant.userId, orgId: tenant.orgId, tier: tenant.tier, scoped: tenant.scoped },
+              action.tool,
+              action.args
+            )
+          : await runGoogleTool(tenant.userId, action.tool, action.args);
         obs = JSON.stringify(tr);
       } catch (e) {
         obs = JSON.stringify({ ok: false, error: (e as Error).message });

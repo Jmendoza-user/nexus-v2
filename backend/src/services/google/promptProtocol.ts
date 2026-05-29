@@ -56,7 +56,7 @@ export function googleSystemBlock(connected: boolean): string {
  * ```json, prosa alrededor y comillas. Devuelve null si no es una acción válida
  * (entonces el texto es la respuesta final al usuario).
  */
-export function parseAction(text: string): ToolAction | null {
+export function parseAction(text: string, isKnown: (name: string) => boolean = isGoogleTool): ToolAction | null {
   if (!text) return null;
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
 
@@ -82,7 +82,7 @@ export function parseAction(text: string): ToolAction | null {
     try {
       const obj = JSON.parse(c) as { tool?: unknown; action?: unknown; args?: unknown; arguments?: unknown };
       const tool = typeof obj.tool === 'string' ? obj.tool : typeof obj.action === 'string' ? obj.action : '';
-      if (tool && isGoogleTool(tool)) {
+      if (tool && isKnown(tool)) {
         const args = (obj.args ?? obj.arguments ?? {}) as Record<string, unknown>;
         return { tool, args: args && typeof args === 'object' ? args : {} };
       }
