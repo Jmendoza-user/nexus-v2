@@ -29,6 +29,13 @@
       "when": 1780022222615,
       "tag": "0003_vault_chunks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780029138257,
+      "tag": "0004_telegram_pairings_user_tz",
+      "breakpoints": true
     }
   ]
 }

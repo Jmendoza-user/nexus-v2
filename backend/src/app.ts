@@ -9,6 +9,8 @@ import { agentsRouter } from './routes/agents.js';
 import { assistantRouter } from './routes/assistant.js';
 import { voiceRouter } from './routes/voice.js';
 import { vaultRouter } from './routes/vault.js';
+import { usersRouter } from './routes/users.js';
+import { telegramApiRouter, telegramWebhookRouter } from './routes/telegram.js';
 import { PathTraversalError } from './services/userEnv.js';
 
 export function createApp() {
@@ -23,10 +25,16 @@ export function createApp() {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api/users', usersRouter);
   app.use('/api/agents', agentsRouter);
   app.use('/api/assistant', assistantRouter);
   app.use('/api/voice', voiceRouter);
   app.use('/api/vault', vaultRouter);
+  app.use('/api/telegram', telegramApiRouter);
+
+  // Webhook PÚBLICO de Telegram (fuera de /api, sin authJwt). Protegido por
+  // secret en el path/header. INACTIVO hasta configurar el bot dedicado.
+  app.use('/tg/webhook', telegramWebhookRouter);
 
   // 404 para rutas no encontradas bajo /api.
   app.use('/api', (_req: Request, res: Response) => {

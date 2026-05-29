@@ -37,6 +37,17 @@ export const env = {
   // ── Embeddings (BGE-m3 1024-dim, servicio local) ─────────────────────────
   BGE_LOCAL_URL: process.env.BGE_LOCAL_URL ?? 'http://127.0.0.1:8100/embed',
 
+  // ── Telegram (bot DEDICADO de V2) ────────────────────────────────────────
+  // IMPORTANTE: NUNCA usar TELEGRAM_BOT_TOKEN (compartido con otro sistema) en
+  // runtime de V2. V2 envía/recibe SOLO con TELEGRAM_BOT_TOKEN_V2 (@NexusJ4Bot
+  // dedicado). Si está vacío, las funciones de notificación quedan no-op (log)
+  // y el webhook responde 503 — el poller NUNCA se inicia automáticamente.
+  TELEGRAM_BOT_TOKEN_V2: process.env.TELEGRAM_BOT_TOKEN_V2 ?? '',
+  // Secret que protege el path/header del webhook público /tg/webhook.
+  TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
+  // Handle público del bot dedicado (solo microcopy en la PWA).
+  TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME ?? 'NexusJ4Bot',
+
   // Binario CLI (ClaudeCliAdapter — uso pesado en hitos siguientes).
   CLAUDE_CLI_BINARY: process.env.CLAUDE_CLI_BINARY ?? 'claude',
   get isProd() {

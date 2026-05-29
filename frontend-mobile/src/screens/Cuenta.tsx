@@ -2,11 +2,12 @@
 // NEXUS — Cuenta (/m/cuenta) + Config (principal, conexiones,
 // seguridad, skills)
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { Avatar, Btn, Chip, IconBtn, ListRow, TopBar, QuotaRow, Toggle } from '../ui';
 import { Icon } from '../lib/icons';
 import { NX } from '../lib/data';
+import { api, type TelegramPairResponse } from '../lib/api';
 import type { Nav } from './types';
 
 type Any = any;
@@ -154,17 +155,51 @@ function ConfigConexiones({ nav }: { nav: Nav }) {
           </div>
         ))}
       </div>
-      <div className="card card-pad col gap3" style={{ marginTop: 16 }}>
-        <div className="row gap2 t-sm fw6"><Icon name="send" size={16} color="var(--accent)" /> Bot de Telegram</div>
-        <p className="t-sm tsec" style={{ margin: 0 }}>Escribe <span className="mono tacc">/start</span> a <span className="fw6">@NexusJ4Bot</span> y pega este código:</p>
-        <div className="row center" style={{ gap: 8 }}>
-          {'X7K9Q2'.split('').map((ch, i) => (
-            <span key={i} className="mono t-2xl fw7 card center" style={{ width: 42, height: 52, color: 'var(--accent)' }}>{ch}</span>
-          ))}
-        </div>
-        <span className="t-xs tter center" style={{ textAlign: 'center' }}>Expira en 9:42</span>
-      </div>
+      <TelegramPairingCard />
     </ConfigShell>
+  );
+}
+
+/** Vinculación Telegram real: estado + código bajo demanda. */
+function TelegramPairingCard() {
+  const [linked, setLinked] = useState<boolean | null>(null);
+  const [pairing, setPairing] = useState<TelegramPairResponse | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.telegramPairingStatus().then((s) => setLinked(s.linked)).catch(() => setLinked(false));
+  }, []);
+
+  async function genCode() {
+    if (busy) return;
+    setBusy(true);
+    try { setPairing(await api.telegramPair()); } catch { /* ignora */ } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="card card-pad col gap3" style={{ marginTop: 16 }}>
+      <div className="row gap2 t-sm fw6"><Icon name="send" size={16} color="var(--accent)" /> Bot de Telegram</div>
+      {linked ? (
+        <div className="row gap2 t-sm" style={{ color: 'var(--success)' }}>
+          <Icon name="check-circle" size={16} color="var(--success)" /> Tu cuenta ya está vinculada a Telegram.
+        </div>
+      ) : pairing ? (
+        <>
+          <p className="t-sm tsec" style={{ margin: 0 }}>Escribe <span className="mono tacc">/start</span> a <span className="fw6">@{pairing.botUsername}</span> y pega este código:</p>
+          <div className="row center" style={{ gap: 8 }}>
+            {pairing.code.split('').map((ch, i) => (
+              <span key={i} className="mono t-2xl fw7 card center" style={{ width: 42, height: 52, color: 'var(--accent)' }}>{ch}</span>
+            ))}
+          </div>
+          <span className="t-xs tter center" style={{ textAlign: 'center' }}>Caduca en {Math.round(pairing.ttlSeconds / 60)} min</span>
+        </>
+      ) : (
+        <>
+          <p className="t-sm tsec" style={{ margin: 0 }}>Genera un código para vincular tu chat de Telegram con NEXUS.</p>
+          <Btn size="sm" variant="secondary" onClick={() => { void genCode(); }} disabled={busy}>{busy ? 'Generando…' : 'Generar código'}</Btn>
+        </>
+      )}
+    </div>
   );
 }
 

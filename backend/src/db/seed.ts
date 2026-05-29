@@ -50,7 +50,10 @@ async function seedDomainFor(
 ): Promise<SeededUser> {
   const { userId, orgId, tier } = result;
 
-  const agentRows = await db
+  // registerUser ya sembró el roster base (3 agentes). Añadimos 3 agentes
+  // explícitos de prueba; agentIds incluye AMBOS (base + prueba) para que los
+  // tests de aislamiento comparen contra el conjunto real del tenant.
+  const extraAgentRows = await db
     .insert(agents)
     .values(
       [1, 2, 3].map((n) => ({
@@ -62,6 +65,9 @@ async function seedDomainFor(
       }))
     )
     .returning();
+  // Conjunto COMPLETO de agentes del tenant (base sembrados + los de prueba).
+  const agentRows = await db.select({ id: agents.id }).from(agents).where(eq(agents.userId, userId));
+  void extraAgentRows;
 
   const projectRows = await db
     .insert(projects)

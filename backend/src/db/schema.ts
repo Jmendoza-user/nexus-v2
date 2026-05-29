@@ -85,10 +85,36 @@ export const users = pgTable(
     telegramChatId: bigint('telegram_chat_id', { mode: 'number' }),
     telegramPairedAt: timestamp('telegram_paired_at', { withTimezone: true }),
     locale: text('locale').notNull().default('es-CO'),
+    timezone: text('timezone').notNull().default('America/Bogota'),
     createdAt: createdAt(),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   },
   (t) => [uniqueIndex('users_email_unique').on(t.email)]
+);
+
+/**
+ * telegram_pairings — códigos efímeros para vincular un chat de Telegram a un
+ * usuario. Flujo: la PWA pide POST /api/telegram/pair → genera un código de 6
+ * chars con expiración (15 min); el usuario lo envía a @NexusJ4Bot con
+ * `/start <codigo>`; el webhook lo consume (consumed_at) y escribe
+ * users.telegram_chat_id.
+ *
+ * pairing_code es PK (6 chars, alfabeto sin ambigüedades). Un código solo se usa
+ * una vez (consumed_at NOT NULL = ya gastado). user_id apunta al dueño que lo
+ * solicitó; el webhook valida expiración + no-consumido antes de vincular.
+ */
+export const telegramPairings = pgTable(
+  'telegram_pairings',
+  {
+    pairingCode: text('pairing_code').primaryKey(), // 6 chars [A-Z2-9]
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('telegram_pairings_user_idx').on(t.userId)]
 );
 
 export const orgMembers = pgTable(
@@ -302,3 +328,4 @@ export type Issue = typeof issues.$inferSelect;
 export type UsageQuota = typeof usageQuotas.$inferSelect;
 export type TierPolicy = typeof tierPolicies.$inferSelect;
 export type VaultChunk = typeof vaultChunks.$inferSelect;
+export type TelegramPairing = typeof telegramPairings.$inferSelect;

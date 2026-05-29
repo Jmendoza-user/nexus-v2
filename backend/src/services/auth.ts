@@ -21,6 +21,7 @@ import {
   tierPolicies,
 } from '../db/schema.js';
 import { provisionUserEnv } from './userEnv.js';
+import { seedBaseAgents } from './baseAgents.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -140,6 +141,15 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
     await provisionUserEnv(result);
   } catch (err) {
     console.error('[auth] provisionUserEnv falló (reprovisionable):', err);
+  }
+
+  // 7. Sembrar el roster base (3 agentes) y fijar el primario. Solo aplica a
+  //    usuarios NUEVOS sin agentes (seedBaseAgents es no-op si ya tiene). Si
+  //    falla, no rompe el registro (resembrable de forma idempotente).
+  try {
+    await seedBaseAgents({ userId: result.userId, orgId: result.orgId });
+  } catch (err) {
+    console.error('[auth] seedBaseAgents falló (resembrable):', err);
   }
 
   return result;

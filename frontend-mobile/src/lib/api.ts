@@ -76,6 +76,50 @@ export interface MeResponse {
   quotas: Quota[];
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  locale: string;
+  timezone: string;
+  tier: string;
+  telegramChatId: number | null;
+  uiTheme: 'dark' | 'light' | 'auto';
+  primaryAgentId: string | null;
+  primaryAgentPrompt: string | null;
+}
+
+export interface ProfilePatch {
+  displayName?: string;
+  locale?: string;
+  timezone?: string;
+  uiTheme?: 'dark' | 'light' | 'auto';
+  primaryAgentPrompt?: string;
+}
+
+export interface AgentItem {
+  id: string;
+  name: string;
+  displayName: string;
+  status: string;
+  adapterType: string;
+  capabilities: string[];
+  runtimeConfig: Record<string, unknown>;
+}
+
+export interface TelegramPairResponse {
+  code: string;
+  expiresAt: string;
+  ttlSeconds: number;
+  botUsername: string;
+  instructions: string;
+}
+
+export interface TelegramPairingStatus {
+  linked: boolean;
+  pairedAt: string | null;
+}
+
 export interface ChatTurn {
   role: 'user' | 'assistant';
   content: string;
@@ -164,6 +208,32 @@ export const api = {
 
   me(): Promise<MeResponse> {
     return jsonFetch<MeResponse>('/api/auth/me');
+  },
+
+  // ── Perfil editable ────────────────────────────────────────────────────────
+  profile(): Promise<{ user: UserProfile }> {
+    return jsonFetch<{ user: UserProfile }>('/api/users/me');
+  },
+
+  updateProfile(patch: ProfilePatch): Promise<{ user: UserProfile }> {
+    return jsonFetch<{ user: UserProfile }>('/api/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  },
+
+  // ── Agentes ─────────────────────────────────────────────────────────────────
+  agents(): Promise<{ agents: AgentItem[] }> {
+    return jsonFetch<{ agents: AgentItem[] }>('/api/agents');
+  },
+
+  // ── Telegram (vinculación) ───────────────────────────────────────────────────
+  telegramPair(): Promise<TelegramPairResponse> {
+    return jsonFetch<TelegramPairResponse>('/api/telegram/pair', { method: 'POST' });
+  },
+
+  telegramPairingStatus(): Promise<TelegramPairingStatus> {
+    return jsonFetch<TelegramPairingStatus>('/api/telegram/pairing-status');
   },
 
   // ── Asistente ────────────────────────────────────────────────────────────
