@@ -120,6 +120,38 @@ export interface TelegramPairingStatus {
   pairedAt: string | null;
 }
 
+// ── Skills ───────────────────────────────────────────────────────────────────
+export interface SkillCatalogEntry {
+  key: string;
+  name: string;
+  description: string;
+  capabilities: string[];
+  requiresMcp: string[];
+  sourceType: 'local' | 'github' | 'url';
+  sourceRef: string | null;
+}
+
+export interface SkillInstallation {
+  id: string;
+  skillKey: string;
+  installPath: string;
+  source: 'registry' | 'user' | 'autocure';
+  status: 'installed' | 'failed' | 'repairing';
+  error: string | null;
+  installedAt: string;
+  catalog: SkillCatalogEntry | null;
+}
+
+// ── Conexiones ────────────────────────────────────────────────────────────────
+export type ConnectionProvider = 'gmail' | 'gcal' | 'meta' | 'telegram' | 'mercadopago';
+export interface ConnectionView {
+  provider: ConnectionProvider;
+  status: 'active' | 'disconnected' | 'expired' | 'pending';
+  config: Record<string, unknown>;
+  hasSecret: boolean;
+  updatedAt: string | null;
+}
+
 export interface ChatTurn {
   role: 'user' | 'assistant';
   content: string;
@@ -225,6 +257,42 @@ export const api = {
   // ── Agentes ─────────────────────────────────────────────────────────────────
   agents(): Promise<{ agents: AgentItem[] }> {
     return jsonFetch<{ agents: AgentItem[] }>('/api/agents');
+  },
+
+  // ── Skills ────────────────────────────────────────────────────────────────
+  skillsCatalog(): Promise<{ catalog: SkillCatalogEntry[] }> {
+    return jsonFetch<{ catalog: SkillCatalogEntry[] }>('/api/skills/catalog');
+  },
+
+  skillsInstalled(): Promise<{ installed: SkillInstallation[] }> {
+    return jsonFetch<{ installed: SkillInstallation[] }>('/api/skills');
+  },
+
+  installSkill(key: string): Promise<{ installation: SkillInstallation }> {
+    return jsonFetch<{ installation: SkillInstallation }>(`/api/skills/${encodeURIComponent(key)}/install`, {
+      method: 'POST',
+    });
+  },
+
+  uninstallSkill(key: string): Promise<{ ok: boolean }> {
+    return jsonFetch<{ ok: boolean }>(`/api/skills/${encodeURIComponent(key)}`, { method: 'DELETE' });
+  },
+
+  // ── Conexiones ──────────────────────────────────────────────────────────────
+  connections(): Promise<{ connections: ConnectionView[]; googleConfigured: boolean }> {
+    return jsonFetch<{ connections: ConnectionView[]; googleConfigured: boolean }>('/api/connections');
+  },
+
+  /**
+   * Inicia OAuth de un provider. Devuelve { authUrl } si está configurado.
+   * Si no (503), lanza ApiError con status 503 para que la UI muestre "Próximamente".
+   */
+  connectionOAuthStart(provider: ConnectionProvider): Promise<{ authUrl: string }> {
+    return jsonFetch<{ authUrl: string }>(`/api/connections/${provider}/oauth/start`, { method: 'POST' });
+  },
+
+  disconnectConnection(provider: ConnectionProvider): Promise<{ ok: boolean }> {
+    return jsonFetch<{ ok: boolean }>(`/api/connections/${provider}`, { method: 'DELETE' });
   },
 
   // ── Telegram (vinculación) ───────────────────────────────────────────────────

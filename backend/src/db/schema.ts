@@ -317,6 +317,122 @@ export const vaultChunks = pgTable(
 );
 
 // ──────────────────────────────────────────────────────────────────────────
+// SKILLS / MCPs / CONEXIONES (Hito 2)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * skills_catalog — catálogo GLOBAL de skills disponibles para instalar.
+ * NO está scoped por tenant: es un catálogo compartido (como tier_policies).
+ * Cada fila describe una "skill" que el agente puede instalar en el env del
+ * usuario (se materializa como un SKILL.md bajo env/skills/<key>/).
+ *
+ * - capabilities: lista de capacidades que la skill aporta (strings).
+ * - requires_mcp: MCPs/servicios que la skill necesita para funcionar (strings).
+ * - source_type/source_ref: de dónde sale la definición (local genera el .md
+ *   desde el propio catálogo; github/url quedan como deuda de runtime real).
+ */
+export const skillsCatalog = pgTable('skills_catalog', {
+  key: text('key').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  capabilities: jsonb('capabilities').notNull().default(sql`'[]'::jsonb`),
+  requiresMcp: jsonb('requires_mcp').notNull().default(sql`'[]'::jsonb`),
+  sourceType: text('source_type').notNull().default('local'), // local | github | url
+  sourceRef: text('source_ref'),
+});
+
+/**
+ * skill_installations — skills instaladas por usuario (scoped).
+ * install_path es RELATIVO al env del usuario (p.ej. 'skills/buscador-web').
+ * source: registry (instalación manual desde el catálogo) | user (skill propia)
+ *         | autocure (instalada por el agente autocurativo).
+ * status: installed | failed | repairing.
+ * UNIQUE(user_id, skill_key) → una instalación por skill y usuario (upsert).
+ */
+export const skillInstallations = pgTable(
+  'skill_installations',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    skillKey: text('skill_key').notNull(),
+    installPath: text('install_path').notNull(),
+    source: text('source').notNull().default('registry'), // registry | user | autocure
+    status: text('status').notNull().default('installed'), // installed | failed | repairing
+    error: text('error'),
+    installedAt: timestamp('installed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('skill_installations_unique').on(t.userId, t.skillKey),
+    index('skill_installations_user_idx').on(t.userId),
+  ]
+);
+
+/**
+ * connections — conexiones externas del usuario (scoped).
+ * provider: gmail | gcal | meta | telegram | mercadopago.
+ * status: active | disconnected | expired | pending.
+ * config: metadata no sensible (cuenta, scopes, etc.).
+ * secret_ref: ruta RELATIVA al .enc dentro del env del usuario
+ *             (p.ej. 'connections/gmail.enc'); los tokens van cifrados ahí,
+ *             NUNCA en la DB. UNIQUE(user_id, provider).
+ */
+export const connections = pgTable(
+  'connections',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(), // gmail | gcal | meta | telegram | mercadopago
+    status: text('status').notNull().default('disconnected'), // active | disconnected | expired | pending
+    config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+    secretRef: text('secret_ref'), // ruta a env/connections/<provider>.enc
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('connections_unique').on(t.userId, t.provider),
+    index('connections_user_idx').on(t.userId),
+  ]
+);
+
+/**
+ * agent_repair_attempts — bitácora del bucle autocurativo (scoped).
+ * Cada intento de reparación de un run fallido genera una fila.
+ * - run_id: identificador del run que se está reparando (correlaciona intentos).
+ * - attempt_num: número de intento (1..maxAttempts).
+ * - error_class: clase de error detectada (skill_missing | tool_not_found | ...).
+ * - diagnosis: diagnóstico (texto del reparador IA o heurístico).
+ * - action: acción JSON propuesta {action, ...}.
+ * - outcome: success | failed | gave_up.
+ */
+export const agentRepairAttempts = pgTable(
+  'agent_repair_attempts',
+  {
+    id: uuidPk(),
+    runId: text('run_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    attemptNum: integer('attempt_num').notNull(),
+    errorClass: text('error_class').notNull(),
+    diagnosis: text('diagnosis'),
+    action: jsonb('action').notNull().default(sql`'{}'::jsonb`),
+    outcome: text('outcome').notNull(), // success | failed | gave_up
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('agent_repair_attempts_run_idx').on(t.runId),
+    index('agent_repair_attempts_user_idx').on(t.userId, t.createdAt.desc()),
+  ]
+);
+
+// ──────────────────────────────────────────────────────────────────────────
 // Tipos inferidos
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -329,3 +445,7 @@ export type UsageQuota = typeof usageQuotas.$inferSelect;
 export type TierPolicy = typeof tierPolicies.$inferSelect;
 export type VaultChunk = typeof vaultChunks.$inferSelect;
 export type TelegramPairing = typeof telegramPairings.$inferSelect;
+export type SkillCatalogEntry = typeof skillsCatalog.$inferSelect;
+export type SkillInstallation = typeof skillInstallations.$inferSelect;
+export type Connection = typeof connections.$inferSelect;
+export type AgentRepairAttempt = typeof agentRepairAttempts.$inferSelect;

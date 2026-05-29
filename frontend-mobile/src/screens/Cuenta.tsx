@@ -7,7 +7,15 @@ import type { CSSProperties } from 'react';
 import { Avatar, Btn, Chip, IconBtn, ListRow, TopBar, QuotaRow, Toggle } from '../ui';
 import { Icon } from '../lib/icons';
 import { NX } from '../lib/data';
-import { api, type TelegramPairResponse } from '../lib/api';
+import {
+  api,
+  type TelegramPairResponse,
+  type SkillCatalogEntry,
+  type SkillInstallation,
+  type ConnectionView,
+  type ConnectionProvider,
+  type UserProfile,
+} from '../lib/api';
 import type { Nav } from './types';
 
 type Any = any;
@@ -66,27 +74,76 @@ function CuentaScreen({ nav }: { nav: Nav }) {
 }
 
 // ---- Asistente principal ----
+const VOICES = [
+  { id: 'elisa-maria', label: 'Elisa María' },
+  { id: 'mateo', label: 'Mateo' },
+  { id: 'valentina', label: 'Valentina' },
+];
+const DEFAULT_PROMPT =
+  'Eres el asistente personal de NEXUS. Tono neutro-cercano, respuestas concisas, sin filler. Español LATAM, tuteo.';
+
 function ConfigPrincipal({ nav }: { nav: Nav }) {
-  const [voice, setVoice] = useState('Elisa María');
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [prompt, setPrompt] = useState('');
+  const [voice, setVoice] = useState('elisa-maria');
+  const [saving, setSaving] = useState(false);
   const [proact, setProact] = useState(3);
+
+  useEffect(() => {
+    api.profile().then(({ user }) => {
+      setProfile(user);
+      setPrompt(user.primaryAgentPrompt ?? DEFAULT_PROMPT);
+    }).catch(() => setPrompt(DEFAULT_PROMPT));
+  }, []);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await api.updateProfile({ primaryAgentPrompt: prompt.trim() || DEFAULT_PROMPT });
+      nav.toast('Asistente actualizado', 'check-circle', 'success');
+    } catch {
+      nav.toast('No se pudo guardar', 'x-circle', 'danger');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function adjustTone(suffix: string) {
+    setPrompt((p) => (p ? `${p}\n${suffix}` : suffix));
+  }
+
   return (
     <ConfigShell nav={nav} title="Asistente principal">
       <div className="t-xs tter fw6 cap" style={cfgLbl}>System prompt</div>
       <div className="card card-pad">
-        <p className="t-sm tsec mono" style={{ margin: 0, lineHeight: 1.6 }}>Eres el asistente personal de Jerson. Tono neutro-cercano, respuestas concisas, sin filler. Español LATAM, tuteo. Cero emojis en respuestas formales.</p>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={5}
+          className="t-sm tsec mono"
+          style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', lineHeight: 1.6, color: 'var(--text-secondary)' }}
+          placeholder={DEFAULT_PROMPT}
+        />
       </div>
       <div className="row gap2 wrap" style={{ margin: '12px 0 4px' }}>
-        {['Más formal', 'Más casual', 'Más conciso'].map(s => <button key={s} className="chip" style={{ cursor: 'pointer', height: 32 }}>{s}</button>)}
+        {[
+          ['Más formal', 'Usa un tono más formal y profesional.'],
+          ['Más casual', 'Usa un tono más casual y relajado.'],
+          ['Más conciso', 'Sé aún más conciso: una o dos frases.'],
+        ].map(([label, suffix]) => (
+          <button key={label} className="chip" style={{ cursor: 'pointer', height: 32 }} onClick={() => adjustTone(suffix)}>{label}</button>
+        ))}
       </div>
 
       <div className="t-xs tter fw6 cap" style={cfgLbl}>Voz</div>
       <div className="card">
-        {['Elisa María', 'Mateo', 'Valentina'].map(v => (
-          <div key={v} className="lrow" onClick={() => setVoice(v)}>
+        {VOICES.map((v) => (
+          <div key={v.id} className="lrow" onClick={() => setVoice(v.id)}>
             <div className="lrow-ic"><Icon name="volume-2" size={18} /></div>
-            <span className="grow t-base fw5">{v}</span>
-            <button className="icon-btn" style={{ width: 36, height: 36 }}><Icon name="play" size={16} /></button>
-            {voice === v && <Icon name="check" size={18} color="var(--accent)" />}
+            <span className="grow t-base fw5">{v.label}</span>
+            <button className="icon-btn" style={{ width: 36, height: 36 }} onClick={(e) => { e.stopPropagation(); nav.toast('Reproduciendo muestra…', 'play', 'accent'); }}><Icon name="play" size={16} /></button>
+            {voice === v.id && <Icon name="check" size={18} color="var(--accent)" />}
           </div>
         ))}
       </div>
@@ -98,62 +155,198 @@ function ConfigPrincipal({ nav }: { nav: Nav }) {
         <div className="row between t-xs tter"><span>Reactivo</span><span className="tacc fw6">Nivel {proact}</span><span>Muy proactivo</span></div>
         <p className="t-sm tsec" style={{ margin: 0 }}>{proact <= 2 ? 'Solo responde cuando le hablas.' : proact >= 4 ? 'Se anticipa: te avisa de borradores, tareas y rutinas sin que preguntes.' : 'Sugiere acciones relevantes en momentos clave.'}</p>
       </div>
+
+      <Btn variant="primary" size="md" full style={{ marginTop: 18 }} onClick={() => { void save(); }} disabled={saving || !profile}>
+        {saving ? 'Guardando…' : 'Guardar cambios'}
+      </Btn>
     </ConfigShell>
   );
 }
 
 // ---- Skills ----
+/** Mapa key→icono Lucide (cae a 'wrench' si no hay coincidencia). */
+const SKILL_ICONS: Record<string, string> = {
+  'buscador-web': 'globe',
+  'lector-pdf': 'file-text',
+  resumidor: 'list-checks',
+  'agenda-google': 'calendar',
+  'finanzas-gmail': 'wallet',
+  'generador-imagenes': 'camera',
+  'rag-vault': 'brain',
+  'ocr-tirillas': 'camera',
+};
+const skillIcon = (key: string): string => SKILL_ICONS[key] ?? 'wrench';
+
+type SkillState = 'installed' | 'available' | 'installing' | 'repairing';
+
 function ConfigSkills({ nav }: { nav: Nav }) {
+  const [catalog, setCatalog] = useState<SkillCatalogEntry[]>([]);
+  const [installed, setInstalled] = useState<SkillInstallation[]>([]);
+  const [busy, setBusy] = useState<Record<string, SkillState>>({});
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    const [cat, inst] = await Promise.all([api.skillsCatalog(), api.skillsInstalled()]);
+    setCatalog(cat.catalog);
+    setInstalled(inst.installed);
+    setLoading(false);
+  }
+  useEffect(() => { void refresh(); }, []);
+
+  const installedKeys = new Map(installed.map((i) => [i.skillKey, i]));
+
+  async function install(entry: SkillCatalogEntry) {
+    setBusy((b) => ({ ...b, [entry.key]: 'installing' }));
+    nav.toast(`Instalando ${entry.name}…`, 'download', 'accent');
+    try {
+      await api.installSkill(entry.key);
+      nav.toast(`${entry.name} instalada`, 'check-circle', 'success');
+      await refresh();
+    } catch {
+      nav.toast(`No se pudo instalar ${entry.name}`, 'x-circle', 'danger');
+    } finally {
+      setBusy((b) => { const n = { ...b }; delete n[entry.key]; return n; });
+    }
+  }
+
+  async function uninstall(entry: SkillCatalogEntry) {
+    setBusy((b) => ({ ...b, [entry.key]: 'installing' }));
+    try {
+      await api.uninstallSkill(entry.key);
+      nav.toast(`${entry.name} desinstalada`, 'check-circle', 'success');
+      await refresh();
+    } catch {
+      nav.toast(`No se pudo desinstalar ${entry.name}`, 'x-circle', 'danger');
+    } finally {
+      setBusy((b) => { const n = { ...b }; delete n[entry.key]; return n; });
+    }
+  }
+
+  const installedEntries = catalog.filter((c) => installedKeys.has(c.key));
+  const availableEntries = catalog.filter((c) => !installedKeys.has(c.key));
+
   return (
     <ConfigShell nav={nav} title="Skills y MCPs">
-      <div className="t-xs tter fw6 cap" style={cfgLbl}>Instaladas</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-        {NX.skills.filter((s: Any) => s.installed).map((s: Any) => <SkillCard key={s.id} s={s} nav={nav} />)}
-      </div>
-      <div className="t-xs tter fw6 cap" style={cfgLbl}>Disponibles</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {NX.skills.filter((s: Any) => !s.installed).map((s: Any) => <SkillCard key={s.id} s={s} nav={nav} />)}
-      </div>
+      {loading ? (
+        <p className="t-sm tsec" style={{ padding: '8px 4px' }}>Cargando…</p>
+      ) : (
+        <>
+          <div className="t-xs tter fw6 cap" style={cfgLbl}>Instaladas</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            {installedEntries.length === 0 && <p className="t-sm tsec" style={{ gridColumn: '1 / -1', margin: 0 }}>Aún no tienes skills instaladas.</p>}
+            {installedEntries.map((c) => (
+              <SkillCard key={c.key} entry={c} install={installedKeys.get(c.key)!} state={busy[c.key] ?? 'installed'} onAction={() => uninstall(c)} />
+            ))}
+          </div>
+          <div className="t-xs tter fw6 cap" style={cfgLbl}>Disponibles</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {availableEntries.map((c) => (
+              <SkillCard key={c.key} entry={c} install={null} state={busy[c.key] ?? 'available'} onAction={() => install(c)} />
+            ))}
+          </div>
+        </>
+      )}
     </ConfigShell>
   );
 }
-function SkillCard({ s, nav }: Any) {
+
+function SkillCard({ entry, install, state, onAction }: { entry: SkillCatalogEntry; install: SkillInstallation | null; state: SkillState; onAction: () => void }) {
+  const isInstalled = Boolean(install) && state !== 'installing';
+  const isRepairing = install?.status === 'repairing' || state === 'repairing';
+  const isBusy = state === 'installing';
   return (
-    <div className="card card-pad col gap2" style={{ cursor: 'pointer' }} onClick={() => nav.toast(s.installed ? `${s.name} ya instalada` : `Instalando ${s.name}…`, s.installed ? 'check-circle' : 'download', s.installed ? 'success' : 'accent')}>
+    <div className="card card-pad col gap2" style={{ cursor: isBusy ? 'default' : 'pointer' }} onClick={() => { if (!isBusy) onAction(); }}>
       <div className="row between">
-        <div className="lrow-ic" style={{ width: 36, height: 36 }}><Icon name={s.icon} size={18} /></div>
-        {s.pro && <Chip tone="accent" style={{ height: 20 }}>Pro</Chip>}
-        {s.installed && !s.pro && <Icon name="check-circle" size={18} color="var(--success)" />}
+        <div className="lrow-ic" style={{ width: 36, height: 36 }}><Icon name={skillIcon(entry.key)} size={18} /></div>
+        {isBusy ? (
+          <Chip tone="accent" style={{ height: 20 }}>{install ? 'Quitando…' : 'Instalando…'}</Chip>
+        ) : isRepairing ? (
+          <Chip tone="warning" style={{ height: 20 }}>Reparando…</Chip>
+        ) : install?.source === 'autocure' ? (
+          <Chip tone="accent" style={{ height: 20 }}>Auto</Chip>
+        ) : isInstalled ? (
+          <Icon name="check-circle" size={18} color="var(--success)" />
+        ) : (
+          <Icon name="download" size={18} color="var(--text-tertiary)" />
+        )}
       </div>
-      <span className="t-sm fw6">{s.name}</span>
-      <p className="t-xs tsec" style={{ margin: 0, lineHeight: 1.45 }}>{s.desc}</p>
-      <span className="t-xs tter mono">{s.mcp}</span>
+      <span className="t-sm fw6">{entry.name}</span>
+      <p className="t-xs tsec" style={{ margin: 0, lineHeight: 1.45 }}>{entry.description}</p>
+      <span className="t-xs tter mono">{(entry.requiresMcp[0]) ?? 'sin MCP'}</span>
     </div>
   );
 }
 
 // ---- Conexiones ----
+const PROVIDER_META: Record<ConnectionProvider, { name: string; icon: string; detail: string }> = {
+  gmail: { name: 'Gmail', icon: 'mail', detail: 'Lectura de movimientos' },
+  gcal: { name: 'Google Calendar', icon: 'calendar', detail: 'Eventos y agenda' },
+  meta: { name: 'Meta / Instagram', icon: 'camera', detail: 'Publicaciones' },
+  telegram: { name: 'Telegram', icon: 'send', detail: '@NexusJ4Bot' },
+  mercadopago: { name: 'MercadoPago', icon: 'credit-card', detail: 'Para facturación' },
+};
+const STATUS_LABEL: Record<ConnectionView['status'], { text: string; tone: string }> = {
+  active: { text: 'Conectado', tone: 'success' },
+  disconnected: { text: 'Desconectado', tone: 'text-tertiary' },
+  expired: { text: 'Expirado', tone: 'warning' },
+  pending: { text: 'Pendiente', tone: 'warning' },
+};
+
 function ConfigConexiones({ nav }: { nav: Nav }) {
+  const [conns, setConns] = useState<ConnectionView[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function refresh() {
+    const res = await api.connections();
+    // No mostramos telegram aquí: tiene su propia tarjeta de vinculación abajo.
+    setConns(res.connections.filter((c) => c.provider !== 'telegram'));
+  }
+  useEffect(() => { void refresh(); }, []);
+
+  async function connect(provider: ConnectionProvider) {
+    setBusy(provider);
+    try {
+      const { authUrl } = await api.connectionOAuthStart(provider);
+      window.location.href = authUrl;
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 503) {
+        nav.toast('Próximamente', 'clock', 'accent');
+      } else {
+        nav.toast('No se pudo iniciar la conexión', 'x-circle', 'danger');
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <ConfigShell nav={nav} title="Conexiones">
       <p className="t-sm tsec" style={{ margin: '0 4px 14px', textWrap: 'pretty' }}>Tus tokens se cifran con AES-256 y se guardan en tu propio VPS. Nunca salen de tu entorno.</p>
       <div className="card">
-        {NX.connections.map((c: Any) => (
-          <div key={c.id} className="lrow" style={{ cursor: 'default' }}>
-            <div className="lrow-ic"><Icon name={c.icon} size={19} /></div>
-            <div className="grow col" style={{ gap: 2 }}>
-              <span className="t-base fw5">{c.name}</span>
-              <span className="t-xs" style={{ color: `var(--${c.tone === 'tertiary' ? 'text-tertiary' : c.tone})` }}>{c.status} · {c.detail}</span>
+        {conns.map((c) => {
+          const meta = PROVIDER_META[c.provider];
+          const st = STATUS_LABEL[c.status];
+          const comingSoon = c.provider === 'meta' || c.provider === 'mercadopago';
+          return (
+            <div key={c.provider} className="lrow" style={{ cursor: 'default' }}>
+              <div className="lrow-ic"><Icon name={meta.icon} size={19} /></div>
+              <div className="grow col" style={{ gap: 2 }}>
+                <span className="t-base fw5">{meta.name}</span>
+                <span className="t-xs" style={{ color: `var(--${st.tone})` }}>{st.text} · {meta.detail}</span>
+              </div>
+              {c.status === 'active' ? (
+                <Icon name="check-circle" size={20} color="var(--success)" />
+              ) : comingSoon ? (
+                <Chip style={{ height: 26 }}>Próximamente</Chip>
+              ) : (
+                <Btn size="sm" variant="secondary" disabled={busy === c.provider} onClick={() => { void connect(c.provider); }}>
+                  {busy === c.provider ? '…' : c.status === 'expired' ? 'Reautorizar' : 'Conectar'}
+                </Btn>
+              )}
             </div>
-            {c.status === 'Desconectado' ? (
-              <Btn size="sm" variant="secondary">Conectar</Btn>
-            ) : c.tone === 'warning' ? (
-              <Btn size="sm" variant="secondary">Reautorizar</Btn>
-            ) : (
-              <Icon name="check-circle" size={20} color="var(--success)" />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
       <TelegramPairingCard />
     </ConfigShell>

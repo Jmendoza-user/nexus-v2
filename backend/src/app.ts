@@ -10,6 +10,8 @@ import { assistantRouter } from './routes/assistant.js';
 import { voiceRouter } from './routes/voice.js';
 import { vaultRouter } from './routes/vault.js';
 import { usersRouter } from './routes/users.js';
+import { skillsRouter } from './routes/skills.js';
+import { connectionsRouter } from './routes/connections.js';
 import { telegramApiRouter, telegramWebhookRouter } from './routes/telegram.js';
 import { PathTraversalError } from './services/userEnv.js';
 
@@ -27,6 +29,8 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/agents', agentsRouter);
+  app.use('/api/skills', skillsRouter);
+  app.use('/api/connections', connectionsRouter);
   app.use('/api/assistant', assistantRouter);
   app.use('/api/voice', voiceRouter);
   app.use('/api/vault', vaultRouter);

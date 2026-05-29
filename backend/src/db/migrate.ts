@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { db, pool } from './index.js';
 import { seedTierPolicies } from './seedTierPolicies.js';
+import { seedSkillsCatalog } from './seedSkillsCatalog.js';
 
 async function main() {
   console.log('[migrate] asegurando extensiones...');
@@ -29,6 +30,10 @@ async function main() {
   console.log('[migrate] sembrando tier_policies...');
   await seedTierPolicies();
   console.log('[migrate] tier_policies OK');
+
+  console.log('[migrate] sembrando skills_catalog...');
+  await seedSkillsCatalog();
+  console.log('[migrate] skills_catalog OK');
 
   await pool.end();
 }
