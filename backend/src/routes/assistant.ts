@@ -35,6 +35,7 @@ import { googleSystemBlock, parseAction } from '../services/google/promptProtoco
 import { runGoogleTool, isGoogleTool } from '../services/google/tools.js';
 import { isNexusTool, runNexusTool, nexusToolsBlock } from '../services/tools/nexus.js';
 import { getUserMemory, userMemoryBlock } from '../services/memory.js';
+import { appendMessage, recentHistory, listMessages, clearConversation } from '../services/conversation.js';
 
 export const assistantRouter = Router();
 
@@ -66,7 +67,7 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
     return;
   }
   const tenant = req.tenant!;
-  const { message, agentId, history } = parsed.data;
+  const { message, agentId } = parsed.data;
 
   // 1. Resolver agente (scoped) y system prompt.
   let agentName = 'NEXUS';
@@ -115,21 +116,18 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
     const { redacted, map } = redact(message);
 
     const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
-    if (history) {
-      for (const h of history) {
-        // Redacta también el historial del usuario; el del asistente ya pasó por restore antes.
-        const c = h.role === 'user' ? redact(h.content).redacted : h.content;
-        messages.push({ role: h.role, content: c });
-      }
+    // Historial REAL desde el servidor (continuidad entre sesiones/dispositivos).
+    // El `history` que manda el cliente se ignora: la fuente de verdad es la DB.
+    const serverHistory = await recentHistory(tenant.userId, 20);
+    for (const h of serverHistory) {
+      const c = h.role === 'user' ? redact(h.content).redacted : h.content;
+      messages.push({ role: h.role, content: c });
     }
     messages.push({ role: 'user', content: redacted });
 
-    // 4. Caché semántico (TokenGuard etapa 2): si el MISMO prompt redactado +
-    //    system + modelo ya tiene respuesta cacheada en Redis, la reusamos sin
-    //    gastar el modelo. La clave usa texto YA redactado (no se cachea PII).
-    //    Sólo cacheamos turnos sin historial (one-shot): con historial la
-    //    respuesta depende del contexto y el hit exacto sería poco fiable.
-    const cacheable = (!history || history.length === 0) && !googleConnected;
+    // 4. Caché: con historial persistente + memoria + tools cada turno es único,
+    //    así que el caché exacto deja de tener sentido (y sería poco fiable).
+    const cacheable = false;
     const ns = `chat|${picked.model}|${systemPrompt.slice(0, 64)}`;
     const key = cacheKey(ns, redacted);
 
@@ -197,6 +195,10 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
     // 6. Restaurar PII en la respuesta (el modelo pudo repetir placeholders).
     const reply = restore(finalText, map);
 
+    // 6b. Persistir el turno (continuidad). Texto real post-restore; user primero.
+    await appendMessage(tenant.userId, tenant.orgId, 'user', message);
+    await appendMessage(tenant.userId, tenant.orgId, 'assistant', reply);
+
     // 7. Registrar uso (1 mensaje) + telemetría de tokens agregados del loop.
     await recordUsage(tenant.orgId, tenant.tier, 'messages', 1);
     void logUsage({
@@ -230,4 +232,23 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
     console.error('[assistant] error inesperado:', err);
     res.status(500).json({ error: 'Algo no salió bien. Inténtalo en un momento.' });
   }
+});
+
+// GET /api/assistant/history — hilo persistido del usuario (para la pantalla Chat).
+assistantRouter.get('/history', async (req: Request, res: Response) => {
+  const rows = await listMessages(req.tenant!.userId, 200);
+  res.json({
+    messages: rows.map((r) => ({
+      id: r.id,
+      role: r.role,
+      content: r.content,
+      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+    })),
+  });
+});
+
+// DELETE /api/assistant/history — borra el hilo (nueva conversación).
+assistantRouter.delete('/history', async (req: Request, res: Response) => {
+  await clearConversation(req.tenant!.userId);
+  res.json({ ok: true });
 });

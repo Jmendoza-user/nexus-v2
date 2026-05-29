@@ -482,6 +482,14 @@ export const api = {
     return jsonFetch<{ agents: AgentItem[] }>('/api/agents');
   },
 
+  // ── Historial de conversación (continuidad) ──────────────────────────────────
+  chatHistory(): Promise<{ messages: { id: string; role: 'user' | 'assistant'; content: string; createdAt: string | null }[] }> {
+    return jsonFetch('/api/assistant/history');
+  },
+  clearChatHistory(): Promise<{ ok: boolean }> {
+    return jsonFetch('/api/assistant/history', { method: 'DELETE' });
+  },
+
   // ── Proyectos + Tareas ───────────────────────────────────────────────────────
   projects(): Promise<{ projects: ProjectItem[] }> {
     return jsonFetch<{ projects: ProjectItem[] }>('/api/projects');

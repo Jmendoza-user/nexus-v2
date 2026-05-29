@@ -36,6 +36,12 @@ export function clearTurns() {
   emit();
 }
 
+/** Reemplaza el hilo completo (hidratación desde el historial del servidor). */
+export function setTurns(next: Turn[]) {
+  turns = next;
+  emit();
+}
+
 function subscribe(fn: () => void) {
   listeners.add(fn);
   return () => listeners.delete(fn);

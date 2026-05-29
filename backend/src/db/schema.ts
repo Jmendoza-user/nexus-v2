@@ -777,3 +777,25 @@ export const userMemory = pgTable(
   ]
 );
 export type UserMemory = typeof userMemory.$inferSelect;
+
+// ──────────────────────────────────────────────────────────────────────────
+// CHAT — historial de conversación persistente (continuidad server-side).
+// Hilo único rolling por usuario; el asistente carga los últimos N como contexto.
+// ──────────────────────────────────────────────────────────────────────────
+export const chatMessages = pgTable(
+  'chat_messages',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // user | assistant
+    content: text('content').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('chat_messages_user_created_idx').on(t.userId, t.createdAt)]
+);
+export type ChatMessageRow = typeof chatMessages.$inferSelect;

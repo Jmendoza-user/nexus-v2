@@ -3,13 +3,28 @@
 // El Home no muestra texto (experiencia tipo Alexa); aquí se lee la
 // entrada y salida. Diseño CANON: TopBar + burbujas con tokens.
 // ============================================================
+import { useEffect } from 'react';
 import { IconBtn, TopBar } from '../ui';
 import { Icon } from '../lib/icons';
-import { useConversation, clearTurns } from '../lib/conversation';
+import { useConversation, clearTurns, setTurns } from '../lib/conversation';
+import { api } from '../lib/api';
 import type { Nav } from './types';
 
 function ChatScreen({ nav }: { nav: Nav }) {
   const turns = useConversation();
+
+  // Hidrata el hilo desde el servidor (continuidad entre sesiones/dispositivos).
+  useEffect(() => {
+    api.chatHistory()
+      .then((r) => setTurns(r.messages.map((m) => ({ role: m.role, content: m.content, ts: m.createdAt ? Date.parse(m.createdAt) : Date.now() }))))
+      .catch(() => { /* mantiene lo que haya en memoria */ });
+  }, []);
+
+  async function clearAll() {
+    try { await api.clearChatHistory(); } catch { /* noop */ }
+    clearTurns();
+    nav.toast('Conversación borrada', 'check', 'success');
+  }
 
   return (
     <div className="col" style={{ height: '100%' }}>
@@ -18,7 +33,7 @@ function ChatScreen({ nav }: { nav: Nav }) {
         title="Conversación"
         right={
           turns.length > 0
-            ? <IconBtn name="trash" onClick={() => { clearTurns(); nav.toast('Conversación borrada', 'check', 'success'); }} />
+            ? <IconBtn name="trash" onClick={() => void clearAll()} />
             : <span style={{ width: 44 }} />
         }
       />
