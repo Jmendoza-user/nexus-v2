@@ -12,6 +12,7 @@ import { vaultRouter } from './routes/vault.js';
 import { usersRouter } from './routes/users.js';
 import { skillsRouter } from './routes/skills.js';
 import { connectionsRouter } from './routes/connections.js';
+import { finanzasRouter } from './routes/finanzas.js';
 import { telegramApiRouter, telegramWebhookRouter } from './routes/telegram.js';
 import { PathTraversalError } from './services/userEnv.js';
 
@@ -31,6 +32,7 @@ export function createApp() {
   app.use('/api/agents', agentsRouter);
   app.use('/api/skills', skillsRouter);
   app.use('/api/connections', connectionsRouter);
+  app.use('/api/finanzas', finanzasRouter);
   app.use('/api/assistant', assistantRouter);
   app.use('/api/voice', voiceRouter);
   app.use('/api/vault', vaultRouter);

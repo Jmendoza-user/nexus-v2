@@ -218,6 +218,102 @@ export interface VaultRagResponse {
   model?: string;
 }
 
+// ── Finanzas ──────────────────────────────────────────────────────────────────
+export type TxTipo = 'Egreso' | 'Ingreso' | 'Inversion' | 'Deuda';
+export type TxCanal = 'Gmail' | 'OCR' | 'Manual' | 'Sync';
+export type TxEstado = 'Borrador' | 'Confirmado' | 'Rechazado';
+
+export interface TransactionView {
+  id: string;
+  tipo: TxTipo;
+  monto: number;
+  currency: string;
+  categoria: string | null;
+  comercioOrigen: string | null;
+  fechaHora: string | null;
+  canal: TxCanal;
+  estado: TxEstado;
+  legitimo: boolean;
+  confidence: number | null;
+  evidenceId: string | null;
+  recurrence: Record<string, unknown> | null;
+  note: string | null;
+  createdAt: string | null;
+  confirmedAt: string | null;
+  rejectedAt: string | null;
+}
+
+export interface EvidenceView {
+  id: string;
+  gmailMsgId: string;
+  subject: string | null;
+  fromAddr: string | null;
+  receivedAt: string | null;
+  rawExcerpt: string | null;
+  classification: Record<string, unknown>;
+}
+
+export interface FinanceSummaryResponse {
+  period: string;
+  currency: string;
+  balanceMonth: number;
+  income: number;
+  expense: number;
+  vsPrev: number;
+  topCategories: { categoria: string; amount: number }[];
+  weekly: { d: string; in: number; out: number }[];
+  upcoming: { name: string; amount: number; date: string; dueDay: number; source: string }[];
+}
+
+export interface ClassificationView {
+  tipo: TxTipo;
+  monto: number;
+  currency: string;
+  comercioOrigen: string | null;
+  categoria: string | null;
+  fechaHora: string | null;
+  legitimo: boolean;
+  confidence: number;
+  reason?: string;
+  redacted: boolean;
+  model?: string | null;
+}
+
+export interface IngestEmailResponse {
+  draft: TransactionView | null;
+  classification: ClassificationView;
+  evidenceId: string | null;
+  duplicate: boolean;
+  message?: string;
+}
+
+export interface UploadReceiptResponse {
+  draft: TransactionView | null;
+  ocrAvailable: boolean;
+  classification?: ClassificationView;
+  message?: string;
+  reason?: string;
+}
+
+export interface CreateManualInput {
+  tipo: TxTipo;
+  monto: number;
+  currency?: string;
+  categoria?: string | null;
+  comercioOrigen?: string | null;
+  fechaHora?: string | null;
+  note?: string | null;
+}
+
+export interface TxFilters {
+  estado?: TxEstado;
+  tipo?: TxTipo;
+  canal?: TxCanal;
+  from?: string;
+  to?: string;
+  limit?: number;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const api = {
   login(email: string, password: string): Promise<AuthResult> {
@@ -328,6 +424,54 @@ export const api = {
     }
     if (!res.ok) throw makeError(res.status, data?.error || `HTTP ${res.status}`, data);
     return data as TranscribeResponse;
+  },
+
+  // ── Finanzas ─────────────────────────────────────────────────────────────────
+  financeSummary(period?: string): Promise<FinanceSummaryResponse> {
+    return jsonFetch<FinanceSummaryResponse>(
+      `/api/finanzas/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`
+    );
+  },
+
+  financeTransactions(filters?: TxFilters): Promise<{ transactions: TransactionView[] }> {
+    const qs = new URLSearchParams();
+    if (filters?.estado) qs.set('estado', filters.estado);
+    if (filters?.tipo) qs.set('tipo', filters.tipo);
+    if (filters?.canal) qs.set('canal', filters.canal);
+    if (filters?.from) qs.set('from', filters.from);
+    if (filters?.to) qs.set('to', filters.to);
+    if (filters?.limit) qs.set('limit', String(filters.limit));
+    const q = qs.toString();
+    return jsonFetch<{ transactions: TransactionView[] }>(`/api/finanzas/transactions${q ? `?${q}` : ''}`);
+  },
+
+  financeTransaction(id: string): Promise<{ transaction: TransactionView; evidence: EvidenceView | null }> {
+    return jsonFetch(`/api/finanzas/transactions/${encodeURIComponent(id)}`);
+  },
+
+  financeCreateManual(input: CreateManualInput): Promise<{ transaction: TransactionView }> {
+    return jsonFetch('/api/finanzas/transactions', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  financeApprove(id: string): Promise<{ transaction: TransactionView }> {
+    return jsonFetch(`/api/finanzas/transactions/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+  },
+
+  financeReject(id: string): Promise<{ transaction: TransactionView }> {
+    return jsonFetch(`/api/finanzas/transactions/${encodeURIComponent(id)}/reject`, { method: 'POST' });
+  },
+
+  financeIngestEmail(input: { rawText: string; from?: string; subject?: string; gmailMsgId?: string }): Promise<IngestEmailResponse> {
+    return jsonFetch('/api/finanzas/ingest/email', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  async financeUploadReceipt(file: Blob, filename = 'receipt'): Promise<UploadReceiptResponse> {
+    const form = new FormData();
+    form.append('file', file, filename);
+    const res = await fetch('/api/finanzas/upload/receipt', { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw makeError(res.status, (data as Any)?.error || `HTTP ${res.status}`, data);
+    return data as UploadReceiptResponse;
   },
 
   // ── Vault ──────────────────────────────────────────────────────────────────

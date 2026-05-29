@@ -433,6 +433,128 @@ export const agentRepairAttempts = pgTable(
 );
 
 // ──────────────────────────────────────────────────────────────────────────
+// MOTOR FINANCIERO (Hito 3) — Human-in-the-Loop: detección → Borrador →
+// aprobación manual → Confirmado.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * numeric(18,2): tipo monto. Drizzle expone numeric como string para no perder
+ * precisión decimal; el servicio convierte a Number sólo para sumas de UI.
+ */
+export const money = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return 'numeric(18, 2)';
+  },
+});
+
+/**
+ * transactions — corazón del motor financiero (scoped por tenant).
+ *
+ * Estados (estado): Borrador → Confirmado | Rechazado.
+ *   - Borrador  : detectado por IA (Gmail/OCR) o creado a mano pendiente; NO
+ *                 afecta el balance.
+ *   - Confirmado: aprobado por el humano (o entrada Manual directa); SÍ cuenta
+ *                 en summary/balance.
+ *   - Rechazado : descartado por el humano; nunca cuenta.
+ *
+ * tipo: Egreso | Ingreso | Inversion | Deuda.
+ * canal_origen (canal): Gmail | OCR | Manual | Sync.
+ * legitimo: heurística antifraude/antispam del clasificador (false = sospechoso
+ *   o no parseable; se crea igual como Borrador para revisión humana).
+ * evidence_id: FK lógica a transaction_email_evidence (correo origen) cuando
+ *   aplica; los OCR/manual pueden no tenerla.
+ * recurrence: NULL = movimiento puntual; objeto {freq, dueDay, ...} si el
+ *   usuario lo marcó recurrente (alimenta "próximos pagos" sin tabla extra).
+ *
+ * Índices: (user_id, estado, fecha_hora desc) para Inbox/Historial paginables.
+ */
+export const transactions = pgTable(
+  'transactions',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    tipo: text('tipo').notNull(), // Egreso | Ingreso | Inversion | Deuda
+    monto: money('monto').notNull(),
+    currency: text('currency').notNull().default('COP'),
+    categoria: text('categoria'),
+    comercioOrigen: text('comercio_origen'),
+    fechaHora: timestamp('fecha_hora', { withTimezone: true }).notNull().defaultNow(),
+    canalOrigen: text('canal_origen').notNull().default('Manual'), // Gmail | OCR | Manual | Sync
+    estado: text('estado').notNull().default('Borrador'), // Borrador | Confirmado | Rechazado
+    legitimo: boolean('legitimo').notNull().default(true),
+    confidence: integer('confidence'), // 0..100 (clasificador IA); null en Manual
+    evidenceId: uuid('evidence_id'), // FK lógica → transaction_email_evidence
+    recurrence: jsonb('recurrence'), // null | { freq, dueDay, source, label }
+    classification: jsonb('classification').notNull().default(sql`'{}'::jsonb`),
+    note: text('note'),
+    createdAt: createdAt(),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('transactions_user_estado_idx').on(t.userId, t.estado, t.fechaHora.desc()),
+    index('transactions_user_fecha_idx').on(t.userId, t.fechaHora.desc()),
+  ]
+);
+
+/**
+ * gmail_oauth_tokens — tokens OAuth de Gmail por usuario (SEAM inactivo).
+ *
+ * Aunque connections.ts ya cifra secretos en filesystem, el motor financiero
+ * necesita metadata de sincronización (last_synced_*) consultable por SQL para
+ * el cron GmailSync. Los tokens se guardan CIFRADOS (AES-256-GCM) en estas
+ * columnas *_enc. Tabla scoped 1:1 por usuario (user_id PK).
+ *
+ * INACTIVO: sin GOOGLE_OAUTH_CLIENT_ID/SECRET no se rellena ni se ejecuta el
+ * cron. Documentado en gmailSync.ts.
+ */
+export const gmailOauthTokens = pgTable('gmail_oauth_tokens', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  email: citext('email').notNull(),
+  refreshTokenEnc: text('refresh_token_enc'),
+  accessTokenEnc: text('access_token_enc'),
+  accessExpiresAt: timestamp('access_expires_at', { withTimezone: true }),
+  scopes: jsonb('scopes').notNull().default(sql`'[]'::jsonb`),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  lastSyncedMsgId: text('last_synced_msg_id'),
+  createdAt: createdAt(),
+});
+
+/**
+ * transaction_email_evidence — evidencia del correo que originó una transacción
+ * (scoped). raw_excerpt se guarda REDACTADO (TokenGuard) y truncado a ≤4KB para
+ * no almacenar PII bancaria cruda. UNIQUE(user_id, gmail_msg_id) → idempotente
+ * por mensaje (re-ingestar el mismo correo no duplica).
+ */
+export const transactionEmailEvidence = pgTable(
+  'transaction_email_evidence',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    gmailMsgId: text('gmail_msg_id').notNull(),
+    subject: text('subject'),
+    fromAddr: text('from_addr'),
+    receivedAt: timestamp('received_at', { withTimezone: true }),
+    rawExcerpt: text('raw_excerpt'), // REDACTADO + ≤4KB
+    classification: jsonb('classification').notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('tx_email_evidence_unique').on(t.userId, t.gmailMsgId),
+    index('tx_email_evidence_user_idx').on(t.userId),
+  ]
+);
+
+// ──────────────────────────────────────────────────────────────────────────
 // Tipos inferidos
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -449,3 +571,7 @@ export type SkillCatalogEntry = typeof skillsCatalog.$inferSelect;
 export type SkillInstallation = typeof skillInstallations.$inferSelect;
 export type Connection = typeof connections.$inferSelect;
 export type AgentRepairAttempt = typeof agentRepairAttempts.$inferSelect;
+export type Transaction = typeof transactions.$inferSelect;
+export type TransactionInsert = typeof transactions.$inferInsert;
+export type GmailOauthToken = typeof gmailOauthTokens.$inferSelect;
+export type TransactionEmailEvidence = typeof transactionEmailEvidence.$inferSelect;
