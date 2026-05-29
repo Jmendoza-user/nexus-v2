@@ -30,6 +30,7 @@ import { OpencodeAdapter } from './opencodeAdapter.js';
 import { pickAdapter } from './agentRunner.js';
 import { AdapterError } from './types.js';
 import { notify } from '../telegramNotifier.js';
+import { logUsage } from '../usageLog.js';
 
 // ── Contrato del "run" del agente ────────────────────────────────────────────
 
@@ -159,7 +160,8 @@ async function diagnose(
   tier: string,
   cls: ClassifiedError,
   errorText: string,
-  catalog: { key: string; name: string; description: string }[]
+  catalog: { key: string; name: string; description: string }[],
+  telemetry?: { userId: string; orgId?: string | null }
 ): Promise<{ action: RepairAction; diagnosis: string }> {
   const catalogKeys = new Set(catalog.map((c) => c.key));
   const fallback = heuristicAction(cls, catalogKeys);
@@ -179,6 +181,16 @@ async function diagnose(
       ],
       { model: picked.model, temperature: 0, maxTokens: 200 }
     );
+    if (telemetry) {
+      void logUsage({
+        userId: telemetry.userId,
+        orgId: telemetry.orgId ?? null,
+        kind: 'repair',
+        model: res.model,
+        tokensPrompt: res.usage.promptTokens,
+        tokensCompletion: res.usage.completionTokens,
+      });
+    }
     const parsed = parseAction(res.text);
     if (parsed) {
       // Si la IA propone instalar una skill que NO existe en el catálogo, no la
@@ -356,7 +368,10 @@ export async function runWithRepair(
 
     // Falló: clasifica + diagnostica + decide acción.
     const cls = classifyError(outcome);
-    const { action, diagnosis } = await diagnose(tier, cls, outcome.output, catalog);
+    const { action, diagnosis } = await diagnose(tier, cls, outcome.output, catalog, {
+      userId,
+      orgId: opts.orgId,
+    });
 
     const isLast = attempt >= maxAttempts;
     let executed = false;

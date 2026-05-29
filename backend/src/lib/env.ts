@@ -37,6 +37,16 @@ export const env = {
   // ── Embeddings (BGE-m3 1024-dim, servicio local) ─────────────────────────
   BGE_LOCAL_URL: process.env.BGE_LOCAL_URL ?? 'http://127.0.0.1:8100/embed',
 
+  // ── Redis (caché semántico de prompts — TokenGuard etapa 2) ──────────────
+  REDIS_URL: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+
+  // ── Playwright (scraping headless — capacidad VPS Pro/Team, Hito 4) ───────
+  // executablePath del chromium cacheado. Si vacío, el scraper resuelve el
+  // binario del cache de Playwright automáticamente.
+  PLAYWRIGHT_CHROMIUM_PATH:
+    process.env.PLAYWRIGHT_CHROMIUM_PATH ??
+    '/root/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome',
+
   // ── Telegram (bot DEDICADO de V2) ────────────────────────────────────────
   // IMPORTANTE: NUNCA usar TELEGRAM_BOT_TOKEN (compartido con otro sistema) en
   // runtime de V2. V2 envía/recibe SOLO con TELEGRAM_BOT_TOKEN_V2 (@NexusJ4Bot

@@ -28,6 +28,8 @@ import { db } from '../db/index.js';
 import { pickAdapter } from '../services/ai/agentRunner.js';
 import { redact, restore } from '../services/tokenGuard.js';
 import { AdapterError, type ChatMessage } from '../services/ai/types.js';
+import { cacheKey, getCached, setCached } from '../services/promptCache.js';
+import { logUsage } from '../services/usageLog.js';
 
 export const assistantRouter = Router();
 
@@ -110,14 +112,54 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
     }
     messages.push({ role: 'user', content: redacted });
 
-    // 4. Llamada al modelo.
+    // 4. Caché semántico (TokenGuard etapa 2): si el MISMO prompt redactado +
+    //    system + modelo ya tiene respuesta cacheada en Redis, la reusamos sin
+    //    gastar el modelo. La clave usa texto YA redactado (no se cachea PII).
+    //    Sólo cacheamos turnos sin historial (one-shot): con historial la
+    //    respuesta depende del contexto y el hit exacto sería poco fiable.
+    const cacheable = !history || history.length === 0;
+    const ns = `chat|${picked.model}|${systemPrompt.slice(0, 64)}`;
+    const key = cacheKey(ns, redacted);
+
+    if (cacheable) {
+      const cached = await getCached(key);
+      if (cached !== null) {
+        const reply = restore(cached, map);
+        await recordUsage(tenant.orgId, tenant.tier, 'messages', 1);
+        // cache_hit: tokens 0 (no se gastó modelo) → alimenta el ahorro en /usage.
+        void logUsage({ userId: tenant.userId, orgId: tenant.orgId, kind: 'chat', model: picked.model, cacheHit: true });
+        res.json({
+          reply,
+          agent: agentName,
+          model: picked.model,
+          adapter: picked.adapterName,
+          downgraded: picked.downgraded,
+          cached: true,
+        });
+        return;
+      }
+    }
+
+    // 5. Llamada al modelo.
     const result = await picked.adapter.chat(messages, { model: picked.model });
 
-    // 5. Restaurar PII en la respuesta (el modelo pudo repetir placeholders).
+    // 6. Restaurar PII en la respuesta (el modelo pudo repetir placeholders).
     const reply = restore(result.text, map);
 
-    // 6. Registrar uso (1 mensaje) tras éxito.
+    // 7. Registrar uso (1 mensaje) + telemetría de tokens.
     await recordUsage(tenant.orgId, tenant.tier, 'messages', 1);
+    void logUsage({
+      userId: tenant.userId,
+      orgId: tenant.orgId,
+      kind: 'chat',
+      model: result.model,
+      tokensPrompt: result.usage.promptTokens,
+      tokensCompletion: result.usage.completionTokens,
+      cacheHit: false,
+    });
+    // Guarda en caché la respuesta CON placeholders (sin PII); el restore se
+    // aplica por petición con su propio map.
+    if (cacheable) void setCached(key, result.text);
 
     res.json({
       reply,
@@ -126,6 +168,7 @@ assistantRouter.post('/chat', quotaCheck('messages'), async (req: Request, res: 
       adapter: picked.adapterName,
       downgraded: picked.downgraded,
       usage: result.usage,
+      cached: false,
     });
   } catch (err) {
     if (err instanceof AdapterError) {

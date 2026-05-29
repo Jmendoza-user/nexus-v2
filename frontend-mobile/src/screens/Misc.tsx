@@ -5,9 +5,35 @@ import { useState, useEffect } from 'react';
 import { Avatar, Btn, Chip, IconBtn, ListRow, TopBar, QuotaRow } from '../ui';
 import { Icon } from '../lib/icons';
 import { NX } from '../lib/data';
+import { api, type NotificationView } from '../lib/api';
 import type { Nav } from './types';
 
 type Any = any;
+
+/** Icono + tono por kind de notificación (cae a 'bell' / 'accent'). */
+const NOTIF_META: Record<string, { icon: string; tone: string }> = {
+  monitor: { icon: 'bell', tone: 'warning' },
+  autocure: { icon: 'wrench', tone: 'accent' },
+  system: { icon: 'info', tone: 'info' },
+};
+const notifMeta = (kind: string) => NOTIF_META[kind] ?? { icon: 'bell', tone: 'accent' };
+
+/** Agrupa por etiqueta de día relativa (Hoy / Ayer / fecha). */
+function dayLabel(iso: string | null): string {
+  if (!iso) return 'Antes';
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  if (sameDay) return 'Hoy';
+  if (d.toDateString() === yest.toDateString()) return 'Ayer';
+  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}
+
+function timeLabel(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+}
 
 function UpgradeScreen({ nav }: { nav: Nav }) {
   return (
@@ -55,26 +81,72 @@ function UpgradeScreen({ nav }: { nav: Nav }) {
 }
 
 function NotifsScreen({ nav }: { nav: Nav }) {
+  const [items, setItems] = useState<NotificationView[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    try {
+      const res = await api.notifications();
+      setItems(res.notifications);
+    } catch { /* deja lista vacía */ } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void refresh(); }, []);
+
+  async function markAllRead() {
+    const unread = items.filter((n) => !n.read);
+    if (unread.length === 0) return;
+    await Promise.all(unread.map((n) => api.markNotificationRead(n.id).catch(() => {})));
+    nav.toast('Marcadas como leídas', 'check', 'success');
+    void refresh();
+  }
+
+  // Agrupa por día relativo preservando orden (la API ya viene desc).
+  const groups: { day: string; items: NotificationView[] }[] = [];
+  for (const n of items) {
+    const day = dayLabel(n.createdAt);
+    let g = groups.find((x) => x.day === day);
+    if (!g) { g = { day, items: [] }; groups.push(g); }
+    g.items.push(n);
+  }
+
   return (
     <div className="col" style={{ height: '100%' }}>
-      <TopBar left={<IconBtn name="arrow-left" onClick={() => nav.back()} />} title="Notificaciones" right={<IconBtn name="check" />} />
+      <TopBar left={<IconBtn name="arrow-left" onClick={() => nav.back()} />} title="Notificaciones" right={<IconBtn name="check" onClick={() => { void markAllRead(); }} />} />
       <div className="grow anim-screen" style={{ overflowY: 'auto', padding: '8px 16px 24px' }}>
-        {NX.notifications.map((g: Any) => (
-          <div key={g.day} style={{ marginBottom: 18 }}>
-            <div className="t-xs tter fw6" style={{ textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 4px 10px' }}>{g.day}</div>
-            <div className="col gap3">
-              {g.items.map((it: Any, k: number) => (
-                <div key={k} className="card card-pad row gap3" style={{ alignItems: 'flex-start' }}>
-                  <div className="lrow-ic" style={{ width: 38, height: 38, color: `var(--${it.tone})`, background: 'var(--bg-elevated)' }}><Icon name={it.icon} size={18} /></div>
-                  <div className="grow col" style={{ gap: 3 }}>
-                    <span className="t-sm fw6" style={{ textWrap: 'pretty' }}>{it.title}</span>
-                    <span className="t-xs tsec">{it.sub}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+        {loading ? (
+          <p className="t-sm tsec" style={{ padding: '8px 4px' }}>Cargando…</p>
+        ) : groups.length === 0 ? (
+          <div className="col center gap3" style={{ padding: '48px 16px', textAlign: 'center' }}>
+            <div className="lrow-ic" style={{ width: 56, height: 56 }}><Icon name="bell" size={26} /></div>
+            <span className="t-base fw6">Sin notificaciones</span>
+            <p className="t-sm tsec" style={{ margin: 0, maxWidth: 260 }}>Tus monitores y agentes te avisarán aquí cuando algo cambie.</p>
           </div>
-        ))}
+        ) : (
+          groups.map((g) => (
+            <div key={g.day} style={{ marginBottom: 18 }}>
+              <div className="t-xs tter fw6" style={{ textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 4px 10px' }}>{g.day}</div>
+              <div className="col gap3">
+                {g.items.map((it) => {
+                  const meta = notifMeta(it.kind);
+                  return (
+                    <div key={it.id} className="card card-pad row gap3" style={{ alignItems: 'flex-start', opacity: it.read ? 0.62 : 1 }}
+                      onClick={() => { if (!it.read) { void api.markNotificationRead(it.id).then(refresh).catch(() => {}); } }}>
+                      <div className="lrow-ic" style={{ width: 38, height: 38, color: `var(--${meta.tone})`, background: 'var(--bg-elevated)' }}><Icon name={meta.icon} size={18} /></div>
+                      <div className="grow col" style={{ gap: 3 }}>
+                        <span className="t-sm fw6" style={{ textWrap: 'pretty' }}>{it.title}</span>
+                        {it.body && <span className="t-xs tsec" style={{ whiteSpace: 'pre-line' }}>{it.body}</span>}
+                        <span className="t-xs tter">{timeLabel(it.createdAt)}</span>
+                      </div>
+                      {!it.read && <span className="badge-dot" style={{ position: 'static' }} />}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

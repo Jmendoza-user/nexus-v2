@@ -31,6 +31,7 @@ import { ingestEmail } from '../services/finance/ingest.js';
 import { runOcr } from '../services/finance/ocrClient.js';
 import { classifyTransaction } from '../services/finance/classifier.js';
 import { createDraft } from '../services/finance/service.js';
+import { logUsage } from '../services/usageLog.js';
 import type { Transaction, TransactionEmailEvidence } from '../db/schema.js';
 
 export const finanzasRouter = Router();
@@ -173,6 +174,7 @@ finanzasRouter.post('/ingest/email', async (req: Request, res: Response) => {
     receivedAt: typeof body.receivedAt === 'string' ? body.receivedAt : undefined,
     gmailMsgId: typeof body.gmailMsgId === 'string' ? body.gmailMsgId : undefined,
     canal: 'Gmail',
+    orgId: req.tenant!.orgId,
   });
   res.status(result.draft ? 201 : 200).json({
     draft: result.draft ? txView(result.draft) : null,
@@ -224,6 +226,9 @@ finanzasRouter.post('/upload/receipt', upload.single('file'), async (req: Reques
     { canal: 'OCR', subject: req.file.originalname },
     req.tenant!.tier
   );
+  if (classification.model) {
+    void logUsage({ userId: req.tenant!.userId, orgId: req.tenant!.orgId, kind: 'classify', model: classification.model });
+  }
   if (classification.monto <= 0 && !classification.legitimo) {
     res.status(200).json({
       draft: null,

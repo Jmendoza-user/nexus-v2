@@ -13,6 +13,10 @@ import { usersRouter } from './routes/users.js';
 import { skillsRouter } from './routes/skills.js';
 import { connectionsRouter } from './routes/connections.js';
 import { finanzasRouter } from './routes/finanzas.js';
+import { usageRouter } from './routes/usage.js';
+import { scrapeRouter } from './routes/scrape.js';
+import { monitorsRouter } from './routes/monitors.js';
+import { notificationsRouter } from './routes/notifications.js';
 import { telegramApiRouter, telegramWebhookRouter } from './routes/telegram.js';
 import { PathTraversalError } from './services/userEnv.js';
 
@@ -33,6 +37,10 @@ export function createApp() {
   app.use('/api/skills', skillsRouter);
   app.use('/api/connections', connectionsRouter);
   app.use('/api/finanzas', finanzasRouter);
+  app.use('/api/usage', usageRouter);
+  app.use('/api/scrape', scrapeRouter);
+  app.use('/api/monitors', monitorsRouter);
+  app.use('/api/notifications', notificationsRouter);
   app.use('/api/assistant', assistantRouter);
   app.use('/api/voice', voiceRouter);
   app.use('/api/vault', vaultRouter);

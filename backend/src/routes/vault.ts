@@ -32,6 +32,7 @@ import { assertWithinUserEnv, type UserPaths } from '../services/userEnv.js';
 import { indexNote, removeNote, reindexAll, ragQuery } from '../services/vaultIndexer.js';
 import { pickAdapter } from '../services/ai/agentRunner.js';
 import { AdapterError, type ChatMessage } from '../services/ai/types.js';
+import { logUsage } from '../services/usageLog.js';
 
 export const vaultRouter = Router();
 vaultRouter.use(authJwt, tenantContext);
@@ -483,6 +484,14 @@ vaultRouter.post('/rag/query', quotaCheck('messages'), async (req: Request, res:
 
     const result = await picked.adapter.chat(messages, { model: picked.model });
     await recordUsage(tenant.orgId, tenant.tier, 'messages', 1);
+    void logUsage({
+      userId: tenant.userId,
+      orgId: tenant.orgId,
+      kind: 'rag',
+      model: result.model,
+      tokensPrompt: result.usage.promptTokens,
+      tokensCompletion: result.usage.completionTokens,
+    });
 
     // Citas: notas únicas (con el mejor score), preservando orden de aparición.
     const seen = new Map<string, number>();

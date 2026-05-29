@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { redact } from '../tokenGuard.js';
 import { classifyTransaction, type SourceMeta } from './classifier.js';
 import { createDraft, upsertEvidence, evidenceExists } from './service.js';
+import { logUsage } from '../usageLog.js';
 import type { Transaction } from '../../db/schema.js';
 
 export interface IngestEmailInput {
@@ -20,6 +21,8 @@ export interface IngestEmailInput {
   /** Id estable del mensaje (Gmail). Si falta, se deriva un hash del contenido. */
   gmailMsgId?: string;
   canal?: 'Gmail' | 'OCR' | 'Sync';
+  /** Org del tenant (para telemetría de uso IA en ai_usage_log). Opcional. */
+  orgId?: string | null;
 }
 
 export interface IngestResult {
@@ -80,6 +83,12 @@ export async function ingestEmail(userId: string, tier: string, input: IngestEma
   }
 
   const classification = await classifyTransaction(input.rawText, meta, tier);
+
+  // Telemetría: registra la invocación IA del clasificador (best-effort). El
+  // classifier no reporta tokens del gateway aquí; queda el modelo usado.
+  if (classification.model) {
+    void logUsage({ userId, orgId: input.orgId ?? null, kind: 'classify', model: classification.model });
+  }
 
   // Evidencia: SIEMPRE redactada antes de persistir (no guardar PII cruda).
   const { redacted } = redact(input.rawText);

@@ -555,6 +555,105 @@ export const transactionEmailEvidence = pgTable(
 );
 
 // ──────────────────────────────────────────────────────────────────────────
+// OBSERVABILIDAD / CAPACIDADES VPS (Hito 4)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * ai_usage_log — bitácora granular de cada invocación a IA (scoped por tenant).
+ *
+ * Se escribe (best-effort, no bloqueante) tras cada llamada a un modelo en los
+ * flujos: assistant/chat, vault/rag, finance/classify, autocure, scrape (monitor
+ * con criterio IA, futuro). Alimenta GET /api/usage con tokens estimados y, con
+ * cache_hit, el ahorro por caché semántico (TokenGuard etapa 2).
+ *
+ * - kind: chat | rag | classify | repair | scrape.
+ * - tokens_prompt / tokens_completion: del usage del adapter (0 si el gateway no
+ *   los reporta; la estimación de $ usa total).
+ * - cache_hit: true si la respuesta salió del caché Redis (no se gastó modelo).
+ * - org_id NULLABLE: algunos flujos internos (autocure) sólo conocen userId; se
+ *   resuelve org cuando está disponible.
+ *
+ * Índice (user_id, created_at desc) para agregaciones del periodo.
+ */
+export const aiUsageLog = pgTable(
+  'ai_usage_log',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // chat | rag | classify | repair | scrape
+    model: text('model'),
+    tokensPrompt: integer('tokens_prompt').notNull().default(0),
+    tokensCompletion: integer('tokens_completion').notNull().default(0),
+    cacheHit: boolean('cache_hit').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('ai_usage_log_user_created_idx').on(t.userId, t.createdAt.desc()),
+    index('ai_usage_log_org_created_idx').on(t.orgId, t.createdAt.desc()),
+  ]
+);
+
+/**
+ * notifications — avisos al usuario (scoped). channel: inapp (badge + pantalla)
+ * o telegram (espejo enviado por telegramNotifier; se registra igual para el
+ * historial). read_at NULL = no leída (alimenta el badge). data lleva contexto
+ * estructurado (p.ej. {monitorId, oldValue, newValue}).
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    channel: text('channel').notNull().default('inapp'), // inapp | telegram
+    kind: text('kind').notNull(), // monitor | autocure | system | ...
+    title: text('title').notNull(),
+    body: text('body'),
+    data: jsonb('data').notNull().default(sql`'{}'::jsonb`),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('notifications_user_created_idx').on(t.userId, t.createdAt.desc())]
+);
+
+/**
+ * monitors — monitores proactivos sobre páginas web (scoped). El scheduler
+ * recorre los enabled cada ~30min, scrapea target_url (Playwright), evalúa
+ * criteria contra last_value y, si cambió/cumple, crea notification + Telegram.
+ *
+ * - kind: price | availability | generic.
+ * - criteria: jsonb {op, value} (op: lt | lte | gt | gte | eq | neq | changed).
+ * - last_value: último texto extraído (para detectar cambios).
+ */
+export const monitors = pgTable(
+  'monitors',
+  {
+    id: uuidPk(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    kind: text('kind').notNull().default('generic'), // price | availability | generic
+    targetUrl: text('target_url').notNull(),
+    selector: text('selector'),
+    criteria: jsonb('criteria').notNull().default(sql`'{}'::jsonb`),
+    lastValue: text('last_value'),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index('monitors_user_created_idx').on(t.userId, t.createdAt.desc())]
+);
+
+// ──────────────────────────────────────────────────────────────────────────
 // Tipos inferidos
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -575,3 +674,6 @@ export type Transaction = typeof transactions.$inferSelect;
 export type TransactionInsert = typeof transactions.$inferInsert;
 export type GmailOauthToken = typeof gmailOauthTokens.$inferSelect;
 export type TransactionEmailEvidence = typeof transactionEmailEvidence.$inferSelect;
+export type AiUsageLog = typeof aiUsageLog.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type Monitor = typeof monitors.$inferSelect;

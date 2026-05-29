@@ -15,17 +15,22 @@ import {
   type ConnectionView,
   type ConnectionProvider,
   type UserProfile,
+  type UsageResponse,
 } from '../lib/api';
 import type { Nav } from './types';
 
 type Any = any;
 
 function CuentaScreen({ nav }: { nav: Nav }) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    api.notifications().then((r) => setUnread(r.unread)).catch(() => setUnread(0));
+  }, []);
   return (
     <div className="col" style={{ height: '100%' }}>
       <div className="topbar">
         <span className="t-base fw6">Cuenta</span>
-        <IconBtn name="bell" badge onClick={() => nav.push('notifs')} />
+        <IconBtn name="bell" badge={unread > 0} onClick={() => nav.push('notifs')} />
       </div>
       <div className="grow" style={{ overflowY: 'auto', padding: '0 16px 24px' }}>
         {/* profile */}
@@ -455,18 +460,72 @@ function ConfigPreferencias({ nav, theme, setTheme }: { nav: Nav; theme: string;
   );
 }
 
-// ---- Uso detalle ----
+// ---- Uso detalle (cableado a /api/usage) ----
+const METRIC_META: Record<string, { label: string; icon: string; fmt: (n: number) => { used: number; total: number; unit: string } }> = {
+  messages: { label: 'Mensajes IA', icon: 'message-circle', fmt: (n) => ({ used: n, total: 0, unit: '' }) },
+  voice_seconds: { label: 'Voz', icon: 'mic', fmt: (n) => ({ used: Math.round(n / 60), total: 0, unit: 'min' }) },
+  vault_bytes: { label: 'Vault', icon: 'book-open', fmt: (n) => ({ used: Math.round(n / (1024 * 1024)), total: 0, unit: 'MB' }) },
+};
+
+function fmtMetric(metric: string, used: number, limit: number): { label: string; icon: string; used: number; total: number; unit: string } {
+  const meta = METRIC_META[metric] ?? { label: metric, icon: 'activity', fmt: (n: number) => ({ used: n, total: 0, unit: '' }) };
+  if (metric === 'voice_seconds') return { label: meta.label, icon: meta.icon, used: Math.round(used / 60), total: Math.round(limit / 60), unit: 'min' };
+  if (metric === 'vault_bytes') return { label: meta.label, icon: meta.icon, used: Math.round(used / (1024 * 1024)), total: Math.round(limit / (1024 * 1024)), unit: 'MB' };
+  return { label: meta.label, icon: meta.icon, used, total: limit, unit: '' };
+}
+
 function UsoScreen({ nav }: { nav: Nav }) {
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.usage().then((u) => { setUsage(u); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const rows = usage ? usage.quotas.map((q) => fmtMetric(q.metric, q.used, q.limit)) : [];
+  const msgQuota = usage?.quotas.find((q) => q.metric === 'messages');
+  const nearLimit = msgQuota ? msgQuota.limit > 0 && msgQuota.used / msgQuota.limit >= 0.8 : false;
+  const savings = usage?.ai.savings;
+
   return (
     <ConfigShell nav={nav} title="Uso del mes">
-      <div className="card card-pad col gap5" style={{ marginBottom: 16 }}>
-        {NX.usage.map((u: Any) => <QuotaRow key={u.label} {...u} />)}
-      </div>
-      <div className="card card-pad col gap2" style={{ borderColor: 'var(--warning)' }}>
-        <div className="row gap2 t-sm fw6" style={{ color: 'var(--warning)' }}><Icon name="alert-triangle" size={16} /> Cerca del límite</div>
-        <p className="t-sm tsec" style={{ margin: 0 }}>Llevas 4.1k de 5k mensajes este mes. Te quedan ~3 días al ritmo actual.</p>
-        <Btn size="md" variant="primary" icon="crown" style={{ marginTop: 6, alignSelf: 'flex-start' }} onClick={() => nav.push('upgrade')}>Ampliar cupo</Btn>
-      </div>
+      {loading ? (
+        <p className="t-sm tsec" style={{ padding: '8px 4px' }}>Cargando…</p>
+      ) : (
+        <>
+          <div className="card card-pad col gap5" style={{ marginBottom: 16 }}>
+            {rows.length === 0 && <p className="t-sm tsec" style={{ margin: 0 }}>Sin datos de uso todavía.</p>}
+            {rows.map((u) => <QuotaRow key={u.label} {...u} />)}
+          </div>
+
+          {/* Ahorro por caché semántico (Token Guard etapa 2) */}
+          <div className="t-xs tter fw6 cap" style={cfgLbl}>Inteligencia y ahorro</div>
+          <div className="card card-pad col gap3" style={{ marginBottom: 16 }}>
+            <div className="row between">
+              <div className="row gap2 t-sm"><Icon name="zap" size={16} color="var(--accent)" /> Llamadas a IA</div>
+              <span className="t-sm fw6">{usage?.ai.totalCalls ?? 0}</span>
+            </div>
+            <div className="row between">
+              <div className="row gap2 t-sm"><Icon name="database" size={16} color="var(--text-secondary)" /> Tokens estimados</div>
+              <span className="t-sm fw6 mono">{(usage?.ai.totalTokens ?? 0).toLocaleString('es-CO')}</span>
+            </div>
+            <div className="row between">
+              <div className="row gap2 t-sm" style={{ color: 'var(--success)' }}><Icon name="shield-check" size={16} color="var(--success)" /> Ahorrado por caché</div>
+              <span className="t-sm fw6" style={{ color: 'var(--success)' }}>
+                {(savings?.cacheHits ?? 0)} hits · ${ (savings?.usdSaved ?? 0).toFixed(3) }
+              </span>
+            </div>
+          </div>
+
+          {nearLimit && (
+            <div className="card card-pad col gap2" style={{ borderColor: 'var(--warning)' }}>
+              <div className="row gap2 t-sm fw6" style={{ color: 'var(--warning)' }}><Icon name="alert-triangle" size={16} /> Cerca del límite</div>
+              <p className="t-sm tsec" style={{ margin: 0 }}>Llevas {msgQuota!.used} de {msgQuota!.limit} mensajes este mes.</p>
+              <Btn size="md" variant="primary" icon="crown" style={{ marginTop: 6, alignSelf: 'flex-start' }} onClick={() => nav.push('upgrade')}>Ampliar cupo</Btn>
+            </div>
+          )}
+        </>
+      )}
     </ConfigShell>
   );
 }

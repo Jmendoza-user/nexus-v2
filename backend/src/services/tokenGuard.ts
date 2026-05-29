@@ -130,3 +130,27 @@ export function restore(text: string, map: RedactionMap): string {
   }
   return out;
 }
+
+/**
+ * nerRedact — Etapa 2 (NER): redacción de entidades NO regex-ables (nombres
+ * propios, direcciones, organizaciones) vía spaCy a través de workers-py.
+ *
+ * ⚠️ NO OPERATIVA. spaCy NO está instalado en este VPS todavía. Esta función
+ * es la INTERFAZ lista para cuando se instale el modelo; por ahora es un PASO-A-
+ * TRAVÉS (devuelve el texto y el map sin cambios) para no romper el pipeline.
+ * La Etapa 1 (regex, redact()) sigue 100% activa y cubre PII estructurada.
+ *
+ * TODO-DEUDA(tokenguard-ner): para activar NER:
+ *   1. En workers-py:  pip install spacy && python -m spacy download es_core_news_md
+ *   2. Exponer un endpoint /ner que reciba texto y devuelva entidades [{label,text,start,end}].
+ *   3. Aquí: llamar al worker, redactar PER/LOC/ORG con placeholders <PER_n>, etc.,
+ *      fusionando con el map de la etapa 1 (regex). Aplicar solo en Pro+ y textos
+ *      largos (>500 chars) para no añadir latencia en chats cortos.
+ *
+ * @param text  texto YA pasado por redact() (etapa 1 regex).
+ * @param prev  map acumulado de la etapa 1 (se fusiona).
+ */
+export async function nerRedact(text: string, prev: RedactionMap = {}): Promise<RedactResult> {
+  // spaCy no instalado → passthrough determinista. Documentado arriba.
+  return { redacted: text, map: prev };
+}

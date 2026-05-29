@@ -314,6 +314,67 @@ export interface TxFilters {
   limit?: number;
 }
 
+// ── Uso / Observabilidad (Hito 4) ───────────────────────────────────────────────
+export interface UsageQuota {
+  metric: 'messages' | 'voice_seconds' | 'vault_bytes';
+  limit: number;
+  used: number;
+  period: string;
+}
+
+export interface UsageResponse {
+  period: string;
+  tier: string;
+  quotas: UsageQuota[];
+  ai: {
+    totalCalls: number;
+    cacheHits: number;
+    tokensPrompt: number;
+    tokensCompletion: number;
+    totalTokens: number;
+    byKind: Record<string, { calls: number; cacheHits: number; tokens: number }>;
+    savings: { cacheHits: number; tokensSaved: number; usdSaved: number };
+  };
+}
+
+// ── Notificaciones (Hito 4) ──────────────────────────────────────────────────────
+export interface NotificationView {
+  id: string;
+  channel: 'inapp' | 'telegram';
+  kind: string;
+  title: string;
+  body: string | null;
+  data: Record<string, unknown>;
+  read: boolean;
+  readAt: string | null;
+  createdAt: string | null;
+}
+
+// ── Monitores (Hito 4) ────────────────────────────────────────────────────────────
+export interface MonitorCriteria {
+  op: 'changed' | 'lt' | 'lte' | 'gt' | 'gte' | 'eq' | 'neq';
+  value?: number;
+}
+export interface MonitorView {
+  id: string;
+  title: string;
+  kind: 'price' | 'availability' | 'generic';
+  targetUrl: string;
+  selector: string | null;
+  criteria: MonitorCriteria;
+  lastValue: string | null;
+  lastCheckedAt: string | null;
+  enabled: boolean;
+  createdAt: string | null;
+}
+
+export interface ScrapeResult {
+  title: string;
+  text: string;
+  extracted: string | null;
+  url: string;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const api = {
   login(email: string, password: string): Promise<AuthResult> {
@@ -517,6 +578,48 @@ export const api = {
 
   vaultReindex(): Promise<{ ok: boolean; notes: number; chunks: number; skipped: number; errors: number }> {
     return jsonFetch('/api/vault/reindex', { method: 'POST' });
+  },
+
+  // ── Uso / Observabilidad ─────────────────────────────────────────────────────
+  usage(): Promise<UsageResponse> {
+    return jsonFetch<UsageResponse>('/api/usage');
+  },
+
+  // ── Notificaciones ───────────────────────────────────────────────────────────
+  notifications(): Promise<{ notifications: NotificationView[]; unread: number }> {
+    return jsonFetch<{ notifications: NotificationView[]; unread: number }>('/api/notifications');
+  },
+
+  markNotificationRead(id: string): Promise<{ ok: boolean }> {
+    return jsonFetch<{ ok: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
+  },
+
+  // ── Monitores ──────────────────────────────────────────────────────────────────
+  monitors(): Promise<{ monitors: MonitorView[] }> {
+    return jsonFetch<{ monitors: MonitorView[] }>('/api/monitors');
+  },
+
+  createMonitor(input: {
+    title: string;
+    kind?: 'price' | 'availability' | 'generic';
+    targetUrl: string;
+    selector?: string;
+    criteria?: MonitorCriteria;
+  }): Promise<{ monitor: MonitorView }> {
+    return jsonFetch('/api/monitors', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  updateMonitor(id: string, patch: { title?: string; selector?: string | null; criteria?: MonitorCriteria; enabled?: boolean }): Promise<{ monitor: MonitorView }> {
+    return jsonFetch(`/api/monitors/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+
+  deleteMonitor(id: string): Promise<{ ok: boolean }> {
+    return jsonFetch(`/api/monitors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  // ── Scraping ─────────────────────────────────────────────────────────────────
+  scrape(url: string, opts?: { selector?: string; waitFor?: string }): Promise<ScrapeResult> {
+    return jsonFetch<ScrapeResult>('/api/scrape/run', { method: 'POST', body: JSON.stringify({ url, ...(opts ?? {}) }) });
   },
 
   /** Sintetiza voz y devuelve un Blob audio/mpeg listo para reproducir. */
